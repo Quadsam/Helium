@@ -1,6 +1,22 @@
 # Helium
 
-A compiler and language built by Quadsam & Gemini
+A compiler and language built by Quadsam
+
+## TODO:
+
+1. Updated Lexer Requirements
+
+To support Helium, our lexer needs to grow. It now needs to recognize:
+
+- Keywords: fn, while, if, else, import, return, int, char, ptr, asm, syscall.
+- Multi-character operators: `->`, `++`, `==`, `<=`, `>=`.
+- Symbols: `:`, `{`, `}`, `,`, `;`, `"` (for import paths)
+
+
+2. Dealing with syscall and asm
+
+- syscall: Map this directly to the x86 syscall instruction. Ensure arguments are moved into the correct registers (rdi, rsi, rdx, r10, r8, r9) before the instruction is emitted.
+- asm: Rreat the asm block as a raw string and literally print it into the `.s` output file during code generation.
 
 
 ## Code Syntax
