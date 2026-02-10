@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
 
 /* --- Lexer Logic --- */
 typedef enum {
@@ -10,13 +11,21 @@ typedef enum {
 	TOKEN_STAR,
 	TOKEN_SLASH,
 	TOKEN_EOF,
-	TOKEN_ERROR
+	TOKEN_ERROR,
+	TOKEN_RPAREN,
+	TOKEN_ARROW,
+	TOKEN_FN,
+	TOKEN_INT_TYPE,
+	TOKEN_IDENTIFIER,
+	TOKEN_LBRACE,
+	TOKEN_RBRACE
 } TokenType;
 
 typedef struct {
 	TokenType type;
 	int value;
-	char lexeme;
+	char lexeme;	// For single chars like '+'
+	char name[256];	// To store "main", "count", "int", exc.
 } Token;
 
 const char *source;
@@ -28,7 +37,24 @@ Token get_next_token()
 	// Skip whilespace
 	while (isspace(source[pos])) pos++;
 
-	if (source[pos] == '\0') return (Token){TOKEN_EOF, 0, 0};
+	if (isalpha(source[pos])) {
+		Token t;
+		int i = 0;
+		while (isalnum(source[pos])) t.name[i++] = source[pos++];
+		t.name[i] = '\0';
+
+		// Check if the identifier is actually a keyword
+		if (strcmp(t.name, "fn") == 0) {
+			t.type = TOKEN_FN;
+		} else if (strcmp(t.name, "int") == 0) {
+			t.type = TOKEN_INT_TYPE;
+		} else {
+			t.type = TOKEN_IDENTIFIER;
+		}
+		return t;
+	}
+
+	if (source[pos] == '\0') return (Token){TOKEN_EOF, 0, 0, "\0"};
 
 	if (isdigit(source[pos])) {
 		int val = 0;
@@ -36,16 +62,16 @@ Token get_next_token()
 			val = val * 10 + (source[pos] - '0');
 			pos++;
 		}
-		return (Token){TOKEN_INT, val, 0};
+		return (Token){TOKEN_INT, val, 0, "int"};
 	}
 
 	// Handle operators
 	char op = source[pos++];
 	switch (op) {
-		case '+': return (Token){TOKEN_PLUS,  0, '+'};
-		case '-': return (Token){TOKEN_MINUS, 0, '-'};
-		case '*': return (Token){TOKEN_STAR,  0, '*'};
-		case '/': return (Token){TOKEN_SLASH, 0, '/'};
+		case '+': return (Token){TOKEN_PLUS,  0, '+', "Add"};
+		case '-': return (Token){TOKEN_MINUS, 0, '-', "Subtract"};
+		case '*': return (Token){TOKEN_STAR,  0, '*', "Multiply"};
+		case '/': return (Token){TOKEN_SLASH, 0, '/', "Divide"};
 		default:  exit(1); // Basic error handling
 	}
 }
@@ -58,15 +84,28 @@ void advance()
 /* --- Parser & AST Logic --- */
 typedef enum {
 	NODE_INT,
-	NODE_BINOP // +, -, *, /
+	NODE_BINOP, // +, -, *, /
+	NODE_FUNCTION,
+	NODE_BLOCK,
+	NODE_RETURN
 } NodeType;
 
 typedef struct ASTNode {
 	NodeType type;
+
+	// For Math (Binary Ops)
 	int int_value;          // For NODE_INT
 	char op;                // For NODE_BINOP
 	struct ASTNode *left;   // Left child
 	struct ASTNode *right;  // Right child
+
+	// For Functions
+	char *func_name;		// Name of the function
+	struct ASTNode *body;	// The block of code beloging to the function
+
+	// For Blocks (Linked List of Statements)
+	struct ASTNode *list;	// Points to the first statement in the block
+	struct ASTNode *next;	// Points to the next statement in the chain
 } ASTNode;
 
 ASTNode *create_node(NodeType type)
@@ -198,6 +237,96 @@ void compile(ASTNode* root)
     // The final result is on the stack; pop it into rax to return it
     printf("    popq    %%rax\n");
     printf("    ret\n");
+}
+
+ASTNode* create_function_node(char *name, ASTNode *body)
+{
+	ASTNode *node = malloc(sizeof(ASTNode));
+	if (!node) {
+		fprintf(stderr, "Memory allocation failed\n");
+		exit(1);
+	}
+
+	node->type = NODE_FUNCTION;
+	node->func_name = strdup(name);	// Make a copy of the name
+	node->body = body;
+
+	// Initialize unused fields to keep things clean
+	node->left = node->right = node->list = node->next = NULL;
+
+	return node;
+}
+
+ASTNode *parse_statement();
+
+ASTNode *create_block_node(ASTNode *statement_list)
+{
+	ASTNode *node = malloc(sizeof(ASTNode));
+	node->type = NODE_BLOCK;
+	node->list = statement_list;
+	node->left = node->right = node->next = node->body = NULL;
+	return node;
+}
+
+ASTNode *parse_block()
+{
+	// Ensure we are strictly looking at a '{'
+	if (current_token.type != TOKEN_LBRACE) {
+		fprintf(stderr, "Syntax Error: Expected '{' at start of block\n");
+		exit(1);
+	}
+	advance();	// Consume '{'
+
+	ASTNode *head = NULL;
+	ASTNode *current = NULL;
+
+	// Keep parsing statements untill we hit '}' or EOF
+	while (current_token.type != TOKEN_RBRACE && current_token.type != TOKEN_EOF) {
+		ASTNode* stmt = parse_statement();
+
+        if (stmt) {
+            if (head == NULL) {
+                head = stmt;
+                current = stmt;
+            } else {
+                current->next = stmt;
+                current = stmt;
+            }
+        }
+	}
+
+	if (current_token.type != TOKEN_RBRACE) {
+		fprintf(stderr, "Syntax Error: Expected '}' at end of block\n");
+		exit(1);
+	}
+	advance();	// Consume '}'
+
+	return create_block_node(head);
+}
+
+ASTNode *parse_function()
+{
+	// current_token is 'fn'
+    advance();
+
+    // Now current_token is the IDENTIFIER (e.g., main)
+    char *func_name = strdup(current_token.name);
+    advance(); // Skip '('
+    
+    // Parse parameters: name : type
+    while (current_token.type != TOKEN_RPAREN) {
+        // ... logic for parameters ...
+    }
+    
+    if (current_token.type == TOKEN_ARROW) { // '->'
+        advance();
+        // Parse return type
+    }
+
+    // Now parse the block { ... }
+    ASTNode* body = parse_block();
+
+    return create_function_node(func_name, body);
 }
 
 /* --- Main Entry Point --- */
