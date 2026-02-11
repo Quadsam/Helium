@@ -1,0 +1,10 @@
+fn main()
+{
+    // Syscall 1 is WRITE
+    // Arg 1: File Descriptor (1 = stdout)
+    // Arg 2: Buffer (Pointer to string)
+    // Arg 3: Count (Length)
+    syscall(1, 1, "Hello, World!\n", 14);
+    
+    syscall(60, 0); // Exit 0
+}

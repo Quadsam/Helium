@@ -1,5 +1,5 @@
 CC        := gcc
-TARGET    := heliumcc
+TARGET    := heliumc
 
 # Directories
 SRC_DIR   := src

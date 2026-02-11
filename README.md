@@ -2,21 +2,36 @@
 
 A compiler and language built by Quadsam
 
-## TODO:
+## Usage
 
+1. Build the compiler:
+
+```bash
+make
+```
+
+2. Run the compiler on Helium source (`.he`):
+
+```bash
+./bin/heliumc -o output.s examples/helloworld.he
+gcc -o output output.s
+```
+
+3. Run the executable:
+
+```bash
+./output
+```
+
+
+
+## TODO:
 1. Updated Lexer Requirements
 
-To support Helium, our lexer needs to grow. It now needs to recognize:
+2. Dealing with ~~syscall and~~ asm
 
-- Keywords: fn, while, if, else, import, return, int, char, ptr, asm, syscall.
-- Multi-character operators: `->`, `++`, `==`, `<=`, `>=`.
-- Symbols: `:`, `{`, `}`, `,`, `;`, `"` (for import paths)
-
-
-2. Dealing with syscall and asm
-
-- syscall: Map this directly to the x86 syscall instruction. Ensure arguments are moved into the correct registers (rdi, rsi, rdx, r10, r8, r9) before the instruction is emitted.
-- asm: Rreat the asm block as a raw string and literally print it into the `.s` output file during code generation.
+- [x] syscall: Map this directly to the x86 syscall instruction. Ensure arguments are moved into the correct registers (rdi, rsi, rdx, r10, r8, r9) before the instruction is emitted.
+- [ ] asm: Treat the asm block as a raw string and literally print it into the `.s` output file during code generation.
 
 
 ## Code Syntax
@@ -28,8 +43,6 @@ Variable declarations should be C-style (`type name = value;`)
 ```C
 int x = 10;
 ```
-
----
 
 2. Control Flow & Braces
 
@@ -47,15 +60,9 @@ We don't require parentheses for `if`, `for`, and `while`.
 
 We use `else if`
 
-
----
-
 3. Function Definitions
 
 Definitions should look like this: `fn add(a: int, b: int) -> int { ... }`
-
-
----
 
 4. Type System
 
@@ -65,15 +72,11 @@ For the V1 compiler, types are limited to what can fit directly on x86-64 regist
 - `char` (8-bit unsigned, for chars/strings)
 - `ptr`  (generic pointer)
 
----
-
 5. Misc Features
 
 1. **Direct Assembly inlining**: Drop `asm` blocks directly into the code
 2. **No header files**: Just include files directly: `import "file.he"`
 3. **Built in `syscall`**: A keyword to trigger Linux syscalls without `libc`
-
----
 
 ### Example code
 

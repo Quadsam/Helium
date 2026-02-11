@@ -34,6 +34,7 @@ typedef enum {
 	TOKEN_ELSE,         // else
 	TOKEN_WHILE,        // while
 	TOKEN_SYSCALL,      // syscall
+	TOKEN_STRING,		// "string"
 } TokenType;
 
 typedef struct {
@@ -127,7 +128,18 @@ Token get_next_token()
 			return (Token){TOKEN_PLUS, "+", 0};
 		case '-': return (Token){TOKEN_MINUS, "-", 0};
 		case '*': return (Token){TOKEN_STAR, "*", 0};
-		case '/': return (Token){TOKEN_SLASH, "/", 0};
+		case '/': 
+			// Check for comment "//"
+			if (source_code[src_pos] == '/') {
+				// Skip until newline
+				while (source_code[src_pos] != '\0' && source_code[src_pos] != '\n')
+					src_pos++;
+				// Recursively call get_next_token to get the actual next token
+				// after the comment is skipped.
+				return get_next_token();
+			}
+			// Otherwise it's just division
+			return (Token){TOKEN_SLASH, "/", 0};
 		case '=':
 			if (source_code[src_pos] == '=') {
 				src_pos++; return (Token){TOKEN_EQ, "==", 0};
@@ -140,6 +152,27 @@ Token get_next_token()
 			printf("Lexer Error: Expected '!='\n"); exit(1);
 		case '<': return (Token){TOKEN_LT, "<", 0};
 		case '>': return (Token){TOKEN_GT, ">", 0};
+		case '"': {
+			Token t;
+			t.type = TOKEN_STRING;
+
+			int i = 0;
+			// Read until closing quote or EOF
+			while (source_code[src_pos] != '"' && source_code[src_pos] != '\0') {
+				// Simple handling for escaped newlines (\n)
+				if (source_code[src_pos] == '\\' && source_code[src_pos+1] == 'n') {
+					t.name[i++] = '\\';
+					t.name[i++] = 'n';
+					src_pos += 2;
+				} else {
+					t.name[i++] = source_code[src_pos++];
+				}
+			}
+
+			t.name[i] = '\0';
+			if (source_code[src_pos] == '"') src_pos++;	// Skip closing "
+			return t;
+		}
 		default: 
 			fprintf(stderr, "Lexer Error: Unknown char '%c'\n", current);
 			exit(1);
@@ -172,17 +205,18 @@ typedef enum {
 	NODE_NEQ,		// !=
 	NODE_SYSCALL,	// syscall()
 	NODE_POST_INC,	// i++
+	NODE_STRING,	// "string"
 } NodeType;
 
 typedef struct ASTNode {
 	NodeType type;
-	int int_value;          // For literals
-	char *var_name;         // For references/declarations
-	char op;                // For binary ops
-	struct ASTNode *left;   // Left child
-	struct ASTNode *right;  // Right child
-	struct ASTNode *body;   // For functions
-	struct ASTNode *next;   // For linked lists in blocks
+	int int_value;			// For literals
+	char *var_name;			// For references/declarations
+	char op;				// For binary ops
+	struct ASTNode *left;	// Left child
+	struct ASTNode *right;	// Right child
+	struct ASTNode *body;	// For functions
+	struct ASTNode *next;	// For linked lists in blocks
 } ASTNode;
 
 // Helper to make a new node
@@ -207,19 +241,19 @@ ASTNode *parse_if()
 {
 	advance(); // Skip 'if'
 	
-	// 1. Parse Condition (no parens required in Helium)
+	// Parse Condition (no parens required in Helium)
 	ASTNode *condition = parse_expression();
 	
-	// 2. Parse 'If' Body
+	// Parse 'If' Body
 	ASTNode *if_body = parse_block();
 	
-	// 3. Handle 'Else' (Optional)
+	// Handle 'Else' (Optional)
 	ASTNode *else_body = NULL;
 	if (current_token.type == TOKEN_ELSE) {
 		advance();
 		// Support 'else if' by checking if next token is IF
 		if (current_token.type == TOKEN_IF) {
-			else_body = parse_if(); // Recursion for 'else if'
+			else_body = parse_if();	// Recursion for 'else if'
 		} else {
 			else_body = parse_block();
 		}
@@ -284,8 +318,18 @@ ASTNode *parse_factor()
 		advance();
 		return node;
 	}
+
+	// Handle syscalls
 	if (current_token.type == TOKEN_SYSCALL) {
 		return parse_syscall();
+	}
+
+	// Handle String Literals
+	if (current_token.type == TOKEN_STRING) {
+		ASTNode *node = create_node(NODE_STRING);
+		node->var_name = strdup(current_token.name);	// Store the string content
+		advance();
+		return node;
 	}
 
 	fprintf(stderr, "Syntax Error: Unexpected token in factor\n");
@@ -542,7 +586,7 @@ int new_label()
 }
 
 /* ========================================================================= */
-/* CODE GENERATOR                             */
+/* CODE GENERATOR                                                            */
 /* ========================================================================= */
 
 // Simple Symbol Table to map "x" -> stack offset
@@ -551,7 +595,7 @@ typedef struct {
 	int offset; // e.g., -8, -16
 } Symbol;
 
-Symbol symbols[100]; // Fixed size for simplicity
+Symbol symbols[100];	// Fixed size for simplicity
 int symbol_count = 0;
 int current_stack_offset = 0;
 
@@ -763,11 +807,26 @@ void gen_asm(ASTNode *node) {
             printf("  movq %%rax, %d(%%rbp)\n", offset);	// Store i back
             break;
         }
+    	case NODE_STRING: {
+    		int label = new_label();
+
+    		// Switch to data section to store the bytes
+    		printf("  .section .rodata\n");
+    		printf(".LC%d: .string \"%s\"\n", label, node->var_name);
+
+    		// Switch back to code section
+    		printf("  .section .text\n");
+
+    		// Load the ADDRESS of the string into rax
+    		printf("  leaq .LC%d(%%rip), %%rax\n", label);
+    		printf("  pushq %%rax\n");
+    		break;
+    	}
 	}
 }
 
 /* ========================================================================= */
-/* MAIN                                     */
+/* MAIN                                                                      */
 /* ========================================================================= */
 
 int main(int argc, char **argv)
