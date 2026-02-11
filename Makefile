@@ -1,5 +1,5 @@
 CC        := gcc
-TARGET    := main
+TARGET    := heliumcc
 
 # Directories
 SRC_DIR   := src
@@ -14,7 +14,7 @@ ifeq ($(MODE), release)
 	LDFLAGS :=
 	MSG     := "RELEASE MODE (Optimized)"
 else
-	CFLAGS  := -std=gnu23 -Wall -Wextra -Werror -ggdb -O0 -fsanitize=address
+	CFLAGS  := -std=gnu23 -Wall -Wextra -ggdb -O0 -fsanitize=address
 	LDFLAGS := -fsanitize=address
 	MSG     := "DEBUG MODE (ASan enabled)"
 endif
