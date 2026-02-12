@@ -27,13 +27,11 @@ gcc -o output output.s
 
 ## TODO:
 
-1. **Arrays**: To hold data buffers (so we can implement itoa to print numbers).
+1. **Global Functions**: Currently main is the only function we parse properly.
 
-2. **Global Functions**: Currently main is the only function we parse properly.
+2. **Function Arguments**: We can't define fn add(int a, int b).
 
-3. **Function Arguments**: We can't define fn add(int a, int b).
-
-4. Dealing with ~~syscall and~~ asm
+3. Dealing with ~~syscall and~~ asm
 	- [x] syscall: Map this directly to the x86 syscall instruction. Ensure arguments are moved into the correct registers (rdi, rsi, rdx, r10, r8, r9) before the instruction is emitted.
 	- [ ] asm: Treat the asm block as a raw string and literally print it into the `.s` output file during code generation.
 
