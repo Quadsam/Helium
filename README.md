@@ -39,7 +39,7 @@ gcc compiler.c -o helium
 Create a file named `main.he`:
 
 ```c
-#include "std.he"
+#include "lib/std.he"
 
 fn main()
 {
