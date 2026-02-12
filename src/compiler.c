@@ -306,6 +306,7 @@ typedef enum {
 	NODE_STRING,		// "string"
 	NODE_ARRAY_DECL,	// int x[10];
 	NODE_ARRAY_ACCESS,	// x[i]
+	NODE_FUNC_CALL,		// add(1, 2);
 } NodeType;
 
 typedef struct ASTNode {
@@ -395,6 +396,35 @@ ASTNode *parse_factor()
 		ASTNode *node = create_node(NODE_VAR_REF);
 		node->var_name = strdup(current_token.name);
 		advance();
+
+		// Function Call: add(1, 2)
+		if (current_token.type == TOKEN_LPAREN) {
+			advance();	// consume '('
+			
+			ASTNode *call_node = create_node(NODE_FUNC_CALL);
+			call_node->var_name = node->var_name; // Reuse name
+			
+			// Parse Arguments
+			ASTNode *current_arg = NULL;
+			while (current_token.type != TOKEN_RPAREN) {
+				ASTNode *expr = parse_expression();
+				
+				if (call_node->left == NULL) {
+					call_node->left = expr;
+					current_arg = expr;
+				} else {
+					current_arg->next = expr;
+					current_arg = expr;
+				}
+				
+				if (current_token.type == TOKEN_COMMA) advance();
+				else if (current_token.type != TOKEN_RPAREN) error("Expected ',' or ')'");
+			}
+			advance();	// consume ')'
+			
+			free(node);	// Free the original var_ref shell
+			return call_node;
+		}
 
 		// Array Access: x[i]
 		if (current_token.type == TOKEN_LBRACKET) {
@@ -646,24 +676,50 @@ ASTNode *parse_block()
 ASTNode *parse_function()
 {
 	if (current_token.type != TOKEN_FN) return NULL;
-	advance();	// current_token is 'fn'
+	advance();	// consume 'fn'
 	
-	// Now current_token is the IDENTIFIER (e.g., main)
 	char *name = strdup(current_token.name);
-	advance();
+	advance();	// consume name
 	
-	// Skip parens (no args support yet)
-	// Parse parameters: name : type
-	if (current_token.type != TOKEN_LPAREN)
-		error("Error: Expected '('");
-	advance();
-	if (current_token.type != TOKEN_RPAREN)
-		error("Error: Expected ')'");
-	advance();
-
+	if (current_token.type != TOKEN_LPAREN) error("Expected '('");
+	advance();	// consume '('
+	
+	// Parse Parameters (a, b, c)
+	ASTNode *first_param = NULL;
+	ASTNode *current_param = NULL;
+	
+	while (current_token.type != TOKEN_RPAREN) {
+		if (current_token.type != TOKEN_IDENTIFIER) error("Expected parameter name");
+		
+		// We reuse NODE_VAR_DECL for parameters
+		ASTNode *param = create_node(NODE_VAR_DECL);
+		param->var_name = strdup(current_token.name);
+		param->left = NULL;	// No default value for params
+		
+		if (first_param == NULL) {
+			first_param = param;
+			current_param = param;
+		} else {
+			current_param->next = param;
+			current_param = param;
+		}
+		
+		advance();	// consume param name
+		
+		if (current_token.type == TOKEN_COMMA) {
+			advance();
+		} else if (current_token.type != TOKEN_RPAREN) {
+			error("Expected ',' or ')'");
+		}
+	}
+	
+	advance();	// consume ')'
+	
 	ASTNode *func = create_node(NODE_FUNCTION);
 	func->var_name = name;
+	func->left = first_param;	// Store params in 'left'
 	func->body = parse_block();
+	
 	return func;
 }
 
@@ -796,7 +852,6 @@ void gen_asm(ASTNode *node) {
 			symbols[symbol_count-1].offset = current_stack_offset; 
 			break;
 		}
-
 		case NODE_ARRAY_ACCESS: {
 			// READ: val = x[i]
 			gen_asm(node->left); // Pushes index
@@ -812,7 +867,6 @@ void gen_asm(ASTNode *node) {
 			printf("  pushq %%rax\n");
 			break;
 		}
-
 		case NODE_ASSIGN:
 			// Check if we are assigning to an ARRAY or a VARIABLE
 			if (node->left && node->left->type == NODE_ARRAY_ACCESS) {
@@ -871,22 +925,66 @@ void gen_asm(ASTNode *node) {
 				stmt = stmt->next;
 			}
 			break;
+		case NODE_FUNC_CALL: {
+			// Evaluate Arguments
+			int arg_count = 0;
+			ASTNode* arg = node->left;
+			while (arg) {
+				gen_asm(arg);	// Push arg to stack
+				arg_count++;
+				arg = arg->next;
+			}
+			
+			// Pop into Registers (Reverse order because stack is LIFO)
+			// System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9
+			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+			
+			for (int i = arg_count - 1; i >= 0; i--) {
+				if (i < 6) {
+					printf("  popq %%%s\n", regs[i]);
+				}
+			}
+			
+			// 3. Call the function
+			printf("  call %s\n", node->var_name);
+			printf("  pushq %%rax\n"); // Push return value
+			break;
+		}
 		case NODE_FUNCTION:
+			// RESET SYMBOL TABLE FOR NEW FUNCTION
+			// This ensures 'x' in main doesn't conflict with 'x' in this function
+			symbol_count = 0;
+			current_stack_offset = 0;
+			
 			printf(".global %s\n", node->var_name);
 			printf("%s:\n", node->var_name);
-			
-			// Function Prologue
 			printf("  pushq %%rbp\n");
 			printf("  movq %%rsp, %%rbp\n");
+			printf("  subq $256, %%rsp\n"); // Reserve stack space
+
+			// HANDLE PARAMETERS
+			// Move registers (rdi, rsi...) onto the stack as local variables
+			ASTNode *param = node->left;
+			int param_idx = 0;
+			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 			
-			// Reserve space for variables
-			// 256 bytes allows for 32 variables (8 bytes each).
-			// This keeps the scratch stack (push/pop) safely below them.
-			printf("  subq $256, %%rsp\n"); 
+			while (param) {
+				// Create stack space for the param
+				add_symbol(param->var_name);
+				int offset = get_offset(param->var_name);
+				
+				// Move register to stack
+				if (param_idx < 6) {
+					printf("  movq %%%s, %d(%%rbp)\n", regs[param_idx], offset);
+				}
+				
+				param = param->next;
+				param_idx++;
+			}
 			
 			gen_asm(node->body);
 			
-			// Function Epilogue (Safety catch)
+			// Epilogue
 			printf("  movq %%rbp, %%rsp\n");
 			printf("  popq %%rbp\n");
 			printf("  ret\n");
