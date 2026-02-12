@@ -1,0 +1,36 @@
+fn main() {
+    int i = 1;
+
+    while i < 21 { // Loop 1 to 20
+        
+        // Manual Modulo 3 calculation
+        int div3 = i / 3;
+        int rem3 = i - (div3 * 3);
+
+        // Manual Modulo 5 calculation
+        int div5 = i / 5;
+        int rem5 = i - (div5 * 5);
+
+        if rem3 == 0 {
+            if rem5 == 0 {
+                // Divisible by both (FizzBuzz)
+                syscall(1, 1, "FizzBuzz\n", 9);
+            } else {
+                // Divisible by 3 only
+                syscall(1, 1, "Fizz\n", 5);
+            }
+        } else {
+            if rem5 == 0 {
+                // Divisible by 5 only
+                syscall(1, 1, "Buzz\n", 5);
+            } else {
+                // Not divisible (Print a dot since we can't print ints yet)
+                syscall(1, 1, ".\n", 2); 
+            }
+        }
+
+        i++;
+    }
+
+    syscall(60, 0);
+}

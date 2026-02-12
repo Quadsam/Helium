@@ -1,0 +1,17 @@
+fn main()
+{
+	int arr[5];
+	
+	// Fill array
+	int i = 0;
+	while i < 5 {
+		arr[i] = i * 2;
+		i++;
+	}
+	
+	// Read array (arr[3] should be 6)
+	int val = arr[3];
+	
+	// Exit with code 6
+	syscall(60, val);
+}

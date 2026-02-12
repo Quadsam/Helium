@@ -3,8 +3,19 @@
 #include <ctype.h>
 #include <string.h>
 
+
 /* ========================================================================= */
-/* LEXER                                                                     */
+/* GLOBAL STATE                                                              */
+/* ========================================================================= */
+
+char *source_code;
+char *current_filename = "unknown";	// Default
+int src_pos = 0;
+int current_line = 1;
+int current_col = 1;
+
+/* ========================================================================= */
+/* TOKENS                                                                    */
 /* ========================================================================= */
 
 typedef enum {
@@ -18,6 +29,8 @@ typedef enum {
 	TOKEN_RPAREN,       // )
 	TOKEN_LBRACE,       // {
 	TOKEN_RBRACE,       // }
+	TOKEN_LBRACKET,		// [
+	TOKEN_RBRACKET,		// ]
 	TOKEN_COMMA,		// ,
 	TOKEN_SEMI,         // ;
 	TOKEN_ASSIGN,       // =
@@ -41,11 +54,64 @@ typedef struct {
 	TokenType type;
 	char name[256]; // To store "main", "count", "int", exc.
 	int value;      // For integers
+	int line;		// For error handling
+	int column;		// For error handling
 } Token;
 
-char *source_code;
-int src_pos = 0;
 Token current_token;
+
+/* ========================================================================= */
+/* ERROR HANDLING                                                            */
+/* ========================================================================= */
+
+void error_at(Token token, const char *message)
+{
+	fprintf(stderr, "%s:%d:%d: %s\n",
+			current_filename, token.line, token.column, message);
+
+	// Find the start of the line
+	int line_start = src_pos;	// Start searching backwards from current pos
+	
+	int line = 1;
+	int i = 0;
+	while (line < token.line && source_code[i] != '\0') {
+		if (source_code[i] == '\n') line++;
+		i++;
+	}
+	line_start = i;
+
+	// Find the end of the line
+	int line_end = line_start;
+	while (source_code[line_end] != '\n' && source_code[line_end] != '\0') {
+		line_end++;
+	}
+
+	// Print the source line
+	fprintf(stderr, "\t");	// Indent
+	for (int j = line_start; j < line_end; j++) {
+		fputc(source_code[j], stderr);
+	}
+	fprintf(stderr, "\n");
+
+	// Print the caret (^) pointing to the column
+	fprintf(stderr, "\t");	// Match indent
+	for (int j = 1; j < token.column; j++) {
+		fputc(' ', stderr);
+	}
+	fprintf(stderr, "^\n");
+
+	exit(1);
+}
+
+// Wrapper for simple errors
+void error(const char *message)
+{
+	error_at(current_token, message);
+}
+
+/* ========================================================================= */
+/* LEXER                                                                     */
+/* ========================================================================= */
 
 // Helper to read the whole file into memory
 char *read_file(const char *filename)
@@ -68,113 +134,145 @@ char *read_file(const char *filename)
 
 Token get_next_token()
 {
-	// Skip whitespace
+	// 1. Skip Whitespace and count lines
 	while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) {
+		if (source_code[src_pos] == '\n') {
+			current_line++;
+			current_col = 1;
+		} else {
+			current_col++;
+		}
 		src_pos++;
 	}
 
+	// Capture the start location of this token
+	int start_line = current_line;
+	int start_col = current_col;
+
 	if (source_code[src_pos] == '\0') {
-		return (Token){TOKEN_EOF, "", 0};
+		return (Token){TOKEN_EOF, "EOF", 0, start_line, start_col};
 	}
 
 	char current = source_code[src_pos];
 
-	// Handle Identifiers and Keywords
+	// Handle Identifiers/Keywords
 	if (isalpha(current)) {
 		Token t;
+		t.line = start_line;
+		t.column = start_col;
 		int i = 0;
 		while (isalnum(source_code[src_pos])) {
 			t.name[i++] = source_code[src_pos++];
+			current_col++; // Track column!
 		}
 		t.name[i] = '\0';
 
-		if (strcmp(t.name, "fn") == 0) t.type = TOKEN_FN;
-		else if (strcmp(t.name, "int") == 0) t.type = TOKEN_INT_TYPE;
-		else if (strcmp(t.name, "return") == 0) t.type = TOKEN_RETURN;
-		else if (strcmp(t.name, "if") == 0) t.type = TOKEN_IF;
-		else if (strcmp(t.name, "else") == 0) t.type = TOKEN_ELSE;
-		else if (strcmp(t.name, "while") == 0) t.type = TOKEN_WHILE;
-		else if (strcmp(t.name, "syscall") == 0) t.type = TOKEN_SYSCALL;
+		if (strcmp(t.name, "fn")			== 0) t.type = TOKEN_FN;
+		else if (strcmp(t.name, "int")		== 0) t.type = TOKEN_INT_TYPE;
+		else if (strcmp(t.name, "return")	== 0) t.type = TOKEN_RETURN;
+		else if (strcmp(t.name, "if")		== 0) t.type = TOKEN_IF;
+		else if (strcmp(t.name, "else")		== 0) t.type = TOKEN_ELSE;
+		else if (strcmp(t.name, "while")	== 0) t.type = TOKEN_WHILE;
+		else if (strcmp(t.name, "syscall")	== 0) t.type = TOKEN_SYSCALL;
 		else t.type = TOKEN_IDENTIFIER;
-		
+
 		return t;
 	}
-
+	
 	// Handle Integers
 	if (isdigit(current)) {
 		Token t;
 		t.type = TOKEN_INT;
+		t.line = start_line;
+		t.column = start_col;
 		t.value = 0;
 		while (isdigit(source_code[src_pos])) {
 			t.value = t.value * 10 + (source_code[src_pos++] - '0');
+			current_col++;
 		}
 		return t;
 	}
 
 	// Handle Symbols
-	src_pos++;
+	// We increment src_pos and current_col for single chars
+	// For multi-chars (e.g., // or ++), we handle inside.
+	
 	switch (current) {
-		case '(': return (Token){TOKEN_LPAREN, "(", 0};
-		case ')': return (Token){TOKEN_RPAREN, ")", 0};
-		case '{': return (Token){TOKEN_LBRACE, "{", 0};
-		case '}': return (Token){TOKEN_RBRACE, "}", 0};
-		case ',': return (Token){TOKEN_COMMA, ",", 0};
-		case ';': return (Token){TOKEN_SEMI, ";", 0};
-		case '+': 
-			if (source_code[src_pos] == '+') {
-				src_pos++; 
-				return (Token){TOKEN_INC, "++", 0};
-			}
-			return (Token){TOKEN_PLUS, "+", 0};
-		case '-': return (Token){TOKEN_MINUS, "-", 0};
-		case '*': return (Token){TOKEN_STAR, "*", 0};
+		// Single char tokens
+		case '(': src_pos++; current_col++; return (Token){TOKEN_LPAREN, "(", 0, start_line, start_col};
+		case ')': src_pos++; current_col++; return (Token){TOKEN_RPAREN, ")", 0, start_line, start_col};
+		case '{': src_pos++; current_col++; return (Token){TOKEN_LBRACE, "{", 0, start_line, start_col};
+		case '}': src_pos++; current_col++; return (Token){TOKEN_RBRACE, "}", 0, start_line, start_col};
+		case '[': src_pos++; current_col++; return (Token){TOKEN_LBRACKET, "[", 0, start_line, start_col};
+		case ']': src_pos++; current_col++; return (Token){TOKEN_RBRACKET, "]", 0, start_line, start_col};
+		case ',': src_pos++; current_col++; return (Token){TOKEN_COMMA, ",", 0, start_line, start_col};
+		case ';': src_pos++; current_col++; return (Token){TOKEN_SEMI, ";", 0, start_line, start_col};
+		case '*': src_pos++; current_col++; return (Token){TOKEN_STAR, "*", 0, start_line, start_col};
+		// Division or Comment
 		case '/': 
-			// Check for comment "//"
-			if (source_code[src_pos] == '/') {
-				// Skip until newline
-				while (source_code[src_pos] != '\0' && source_code[src_pos] != '\n')
+			if (source_code[src_pos + 1] == '/') {
+				// Comment: Skip until newline
+				// Note: We don't change line number here; the next loop of get_next_token will handle the \n
+				while (source_code[src_pos] != '\0' && source_code[src_pos] != '\n') {
 					src_pos++;
-				// Recursively call get_next_token to get the actual next token
-				// after the comment is skipped.
-				return get_next_token();
+					// Col updates aren't strictly necessary inside comments, but good practice
+					current_col++; 
+				}
+				return get_next_token();	// Recursion to find real token
 			}
-			// Otherwise it's just division
-			return (Token){TOKEN_SLASH, "/", 0};
+			src_pos++; current_col++; 
+			return (Token){TOKEN_SLASH, "/", 0, start_line, start_col};
+		case '-': src_pos++; current_col++; return (Token){TOKEN_MINUS, "-", 0, start_line, start_col};
+		case '+': 
+			if (source_code[src_pos+1] == '+') {
+				src_pos+=2; current_col+=2; 
+				return (Token){TOKEN_INC, "++", 0, start_line, start_col};
+			}
+			src_pos++; current_col++;
+			return (Token){TOKEN_PLUS, "+", 0, start_line, start_col};
+
 		case '=':
-			if (source_code[src_pos] == '=') {
-				src_pos++; return (Token){TOKEN_EQ, "==", 0};
+			if (source_code[src_pos+1] == '=') {
+				src_pos+=2; current_col+=2; 
+				return (Token){TOKEN_EQ, "==", 0, start_line, start_col};
 			}
-			return (Token){TOKEN_ASSIGN, "=", 0};
+			src_pos++; current_col++;
+			return (Token){TOKEN_ASSIGN, "=", 0, start_line, start_col};
+
 		case '!':
-			if (source_code[src_pos] == '=') {
-				src_pos++; return (Token){TOKEN_NEQ, "!=", 0};
+			if (source_code[src_pos+1] == '=') {
+				src_pos+=2; current_col+=2; 
+				return (Token){TOKEN_NEQ, "!=", 0, start_line, start_col};
 			}
-			printf("Lexer Error: Expected '!='\n"); exit(1);
-		case '<': return (Token){TOKEN_LT, "<", 0};
-		case '>': return (Token){TOKEN_GT, ">", 0};
+			error_at((Token){0, "", 0, start_line, start_col}, "Expected '!='");
+			exit(1);
+		case '<': src_pos++; current_col++; return (Token){TOKEN_LT, "<", 0, start_line, start_col};
+		case '>': src_pos++; current_col++; return (Token){TOKEN_GT, ">", 0, start_line, start_col};
 		case '"': {
 			Token t;
 			t.type = TOKEN_STRING;
-
+			t.line = start_line;
+			t.column = start_col;
+			
+			src_pos++; current_col++;	// Skip opening "
 			int i = 0;
-			// Read until closing quote or EOF
 			while (source_code[src_pos] != '"' && source_code[src_pos] != '\0') {
-				// Simple handling for escaped newlines (\n)
 				if (source_code[src_pos] == '\\' && source_code[src_pos+1] == 'n') {
-					t.name[i++] = '\\';
-					t.name[i++] = 'n';
-					src_pos += 2;
+					t.name[i++] = '\\'; t.name[i++] = 'n';
+					src_pos += 2; current_col += 2;
 				} else {
 					t.name[i++] = source_code[src_pos++];
+					current_col++;
 				}
 			}
-
 			t.name[i] = '\0';
-			if (source_code[src_pos] == '"') src_pos++;	// Skip closing "
+			if (source_code[src_pos] == '"') {
+				src_pos++; current_col++;	// Skip closing "
+			}
 			return t;
 		}
 		default: 
-			fprintf(stderr, "Lexer Error: Unknown char '%c'\n", current);
+			error_at((Token){0, "", 0, start_line, start_col}, "Unknown character");
 			exit(1);
 	}
 }
@@ -185,27 +283,29 @@ void advance()
 }
 
 /* ========================================================================= */
-/* AST                                      */
+/* AST                                                                       */
 /* ========================================================================= */
 
 typedef enum {
-	NODE_INT,		// Integer literal
-	NODE_VAR_REF,	// x (usage of a variable)
-	NODE_BINOP,		// Math (+, -, *, /)
-	NODE_ASSIGN,	// x = ...;
-	NODE_VAR_DECL,	// int x = ...;
-	NODE_RETURN,	// return x;
-	NODE_BLOCK,		// { ... }
-	NODE_FUNCTION,	// Function definition
-	NODE_IF,		// if ...
-	NODE_WHILE,		// while ...
-	NODE_GT,		// >
-	NODE_LT,		// <
-	NODE_EQ,		// ==
-	NODE_NEQ,		// !=
-	NODE_SYSCALL,	// syscall()
-	NODE_POST_INC,	// i++
-	NODE_STRING,	// "string"
+	NODE_INT,			// Integer literal
+	NODE_VAR_REF,		// x (usage of a variable)
+	NODE_BINOP,			// Math (+, -, *, /)
+	NODE_ASSIGN,		// x = ...;
+	NODE_VAR_DECL,		// int x = ...;
+	NODE_RETURN,		// return x;
+	NODE_BLOCK,			// { ... }
+	NODE_FUNCTION,		// Function definition
+	NODE_IF,			// if ...
+	NODE_WHILE,			// while ...
+	NODE_GT,			// >
+	NODE_LT,			// <
+	NODE_EQ,			// ==
+	NODE_NEQ,			// !=
+	NODE_SYSCALL,		// syscall()
+	NODE_POST_INC,		// i++
+	NODE_STRING,		// "string"
+	NODE_ARRAY_DECL,	// int x[10];
+	NODE_ARRAY_ACCESS,	// x[i]
 } NodeType;
 
 typedef struct ASTNode {
@@ -296,11 +396,27 @@ ASTNode *parse_factor()
 		node->var_name = strdup(current_token.name);
 		advance();
 
-		// CHECK FOR POST-INCREMENT (++)
+		// Array Access: x[i]
+		if (current_token.type == TOKEN_LBRACKET) {
+			advance();	// consume '['
+			ASTNode *index = parse_expression();
+			if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
+			advance();	// consume ']'
+			
+			// Convert to ARRAY_ACCESS node
+			ASTNode *array_node = create_node(NODE_ARRAY_ACCESS);
+			array_node->var_name = node->var_name;
+			array_node->left = index; 
+			
+			free(node);	// Cleanup
+			return array_node;
+		}
+
+		// Post-Increment: i++
 		if (current_token.type == TOKEN_INC) {
-			advance(); // consume '++'
+			advance();
 			ASTNode* inc_node = create_node(NODE_POST_INC);
-			inc_node->left = node; // The variable is the child of the increment
+			inc_node->left = node; 
 			return inc_node;
 		}
 
@@ -312,7 +428,7 @@ ASTNode *parse_factor()
 		advance();
 		ASTNode *node = parse_expression();
 		if (current_token.type != TOKEN_RPAREN) {
-			fprintf(stderr, "Syntax Error: Expected ')'\n");
+			error("Syntax Error: Expected ')'");
 			exit(1);
 		}
 		advance();
@@ -332,7 +448,7 @@ ASTNode *parse_factor()
 		return node;
 	}
 
-	fprintf(stderr, "Syntax Error: Unexpected token in factor\n");
+	error("Syntax Error: Unexpected token in factor");
 	exit(1);
 }
 
@@ -389,35 +505,81 @@ ASTNode *parse_comparison()
 	return node;
 }
 
-// Update parse_expression to call parse_comparison instead of parse_math
 ASTNode *parse_expression()
 {
 	ASTNode* lhs = parse_comparison();
 
 	// Check for Assignment
 	if (current_token.type == TOKEN_ASSIGN) {
-		advance();	// consume '='
+		advance(); // consume '='
 
-		// Ensure LHS is actually a variable!
-		// You can't do "10 = x" or "(5+5) = x"
-		if (lhs->type != NODE_VAR_REF) {
-			fprintf(stderr, "Syntax Error: Invalid l-value. Can only assign to variables.\n");
-			exit(1);
-		}
+		if (lhs->type != NODE_VAR_REF && lhs->type != NODE_ARRAY_ACCESS)
+			error("Syntax Error: Invalid l-value. Can only assign to variables or arrays.");
+		
 		ASTNode *assign = create_node(NODE_ASSIGN);
-		assign->var_name = lhs->var_name;	// Reuse the name
-		assign->left = NULL;
-
-		// The Right-Hand Side (RHS) is another expression		
+		
+		// Handle Array Assignment specifically
+		if (lhs->type == NODE_ARRAY_ACCESS) {
+			assign->left = lhs; 
+			// FIX: Use strdup to create a COPY of the string.
+			// Now both nodes own their own string memory.
+			assign->var_name = strdup(lhs->var_name); 
+		} else {
+			// For normal variables, we destroy the old node (lhs),
+			// so we can just steal its pointer safely.
+			assign->var_name = lhs->var_name;
+			assign->left = NULL; 
+			free(lhs); // Free the shell (struct only)
+		}
+		
 		assign->right = parse_expression();
-
-
-		// We can free the 'lhs' node now because we moved its data into 'assignNode'
-		free(lhs); // We moved the name to 'assign', so free the shell
 		return assign;
 	}
 	return lhs;
 }
+
+// Note: We check specifically for 'int', 'char', or 'ptr' types here
+ASTNode *parse_var_declaration()
+{
+	advance();	// Consume 'int'
+	
+	if (current_token.type != TOKEN_IDENTIFIER) error("Expected variable name");
+	char *name = strdup(current_token.name);
+	advance();
+
+	// Check for Array Declaration: int x[10];
+	if (current_token.type == TOKEN_LBRACKET) {
+		advance();	// consume '['
+		
+		if (current_token.type != TOKEN_INT) error("Array size must be an integer literal");
+		int size = current_token.value;
+		advance();	// consume size
+		
+		if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
+		advance();	// consume ']'
+		
+		if (current_token.type != TOKEN_SEMI) error("Expected ';'");
+		advance();	// consume ';'
+		
+		ASTNode *node = create_node(NODE_ARRAY_DECL);
+		node->var_name = name;
+		node->int_value = size;
+		return node;
+	}
+
+	// Normal Variable Declaration: int x = 5;
+	if (current_token.type != TOKEN_ASSIGN) error("Expected '=' or '['");
+	advance(); // consume '='
+	
+	ASTNode *node = create_node(NODE_VAR_DECL);
+	node->var_name = name;
+	node->left = parse_expression();
+
+	if (current_token.type != TOKEN_SEMI) error("Expected ';' after declaration");
+	advance(); // consume ';'
+	return node;
+}
+
 
 ASTNode *parse_statement()
 {
@@ -427,35 +589,15 @@ ASTNode *parse_statement()
 		ASTNode *node = create_node(NODE_RETURN);
 		node->left = parse_expression();
 		if (current_token.type != TOKEN_SEMI) {
-			fprintf(stderr, "Error: Expected ';' after return\n"); exit(1);
+			error("Error: Expected ';' after return");
 		}
 		advance();
 		return node;
 	}
 
 	// Variable Declaration (int x = ...)
-	// Note: We check specifically for 'int', 'char', or 'ptr' types here
 	if (current_token.type == TOKEN_INT_TYPE) {
-		advance(); // consume 'int'
-		if (current_token.type != TOKEN_IDENTIFIER) {
-			fprintf(stderr, "Error: Expected variable name\n"); exit(1);
-		}
-		char *name = strdup(current_token.name);
-		advance();
-		if (current_token.type != TOKEN_ASSIGN) {
-			fprintf(stderr, "Error: Expected '='\n"); exit(1);
-		}
-		advance();
-		
-		ASTNode *node = create_node(NODE_VAR_DECL);
-		node->var_name = name;
-		node->left = parse_expression();
-
-		if (current_token.type != TOKEN_SEMI) {
-			fprintf(stderr, "Error: Expected ';' after declaration\n"); exit(1);
-		}
-		advance();
-		return node;
+		return parse_var_declaration();
 	}
 
 	if (current_token.type == TOKEN_IF) return parse_if();
@@ -464,10 +606,9 @@ ASTNode *parse_statement()
 
 	// Default: Expression statement (x = 5;)
 	ASTNode *node = parse_expression();
-	if (current_token.type != TOKEN_SEMI) {
-		fprintf(stderr, "Error: Expected ';' after expression\n");
-		exit(1);
-	}
+	if (current_token.type != TOKEN_SEMI)
+		error("Error: Expected ';' after expression");
+
 	advance();
 	return node;
 }
@@ -475,9 +616,9 @@ ASTNode *parse_statement()
 ASTNode *parse_block()
 {
 	// Ensure we are strictly looking at a '{'
-	if (current_token.type != TOKEN_LBRACE) {
-		fprintf(stderr, "Syntax Error: Expected '{' at start of block\n");
-	}
+	if (current_token.type != TOKEN_LBRACE)
+		error("Syntax Error: Expected '{' at start of block");
+
 	advance();	// Consume '{'
 
 	ASTNode *block = create_node(NODE_BLOCK);
@@ -496,7 +637,7 @@ ASTNode *parse_block()
 	}
 
 	if (current_token.type != TOKEN_RBRACE) {
-		printf("Error: Expected '}'\n"); exit(1);
+		error("Error: Expected '}'");
 	}
 	advance();	// Consume '}'
 	return block;
@@ -513,9 +654,11 @@ ASTNode *parse_function()
 	
 	// Skip parens (no args support yet)
 	// Parse parameters: name : type
-	if (current_token.type != TOKEN_LPAREN) { printf("Error: Expected '('\n"); exit(1); }
+	if (current_token.type != TOKEN_LPAREN)
+		error("Error: Expected '('");
 	advance();
-	if (current_token.type != TOKEN_RPAREN) { printf("Error: Expected ')'\n"); exit(1); }
+	if (current_token.type != TOKEN_RPAREN)
+		error("Error: Expected ')'");
 	advance();
 
 	ASTNode *func = create_node(NODE_FUNCTION);
@@ -528,10 +671,9 @@ ASTNode *parse_syscall()
 {
 	advance();	// Skip 'syscall'
 	
-	if (current_token.type != TOKEN_LPAREN) {
-		fprintf(stderr, "Error: Expected '(' after syscall\n");
-		exit(1);
-	}
+	if (current_token.type != TOKEN_LPAREN)
+		error("Error: Expected '(' after syscall");
+
 	advance();	// Skip '('
 	
 	ASTNode *call_node = create_node(NODE_SYSCALL);
@@ -552,7 +694,7 @@ ASTNode *parse_syscall()
 		if (current_token.type == TOKEN_COMMA) {
 			advance();	// Skip ','
 		} else if (current_token.type != TOKEN_RPAREN) {
-			fprintf(stderr, "Error: Expected ',' or ')'\n"); exit(1);
+			error("Error: Expected ',' or ')'");
 		}
 	}
 	
@@ -640,12 +782,62 @@ void gen_asm(ASTNode *node) {
 			printf("  popq %%rax\n");
 			printf("  movq %%rax, %d(%%rbp)\n", get_offset(node->var_name));
 			break;
+		case NODE_ARRAY_DECL: {
+			// Reserve space: size * 8 bytes
+			int size = node->int_value;
+			int total_size = size * 8;
+			current_stack_offset -= total_size;
+			
+			// Register symbol pointing to array start
+			add_symbol(node->var_name);
+			// Fix: add_symbol moves offset by 8, but we want a block. 
+			// We manually adjusted offset above, so let's overwrite the symbol logic slightly
+			// to point to the *start* of the block we just reserved.
+			symbols[symbol_count-1].offset = current_stack_offset; 
+			break;
+		}
+
+		case NODE_ARRAY_ACCESS: {
+			// READ: val = x[i]
+			gen_asm(node->left); // Pushes index
+			
+			int offset = get_offset(node->var_name);
+			printf("  popq %%rbx\n");        // Index in RBX
+			printf("  movq $%d, %%rax\n", offset); // Base offset
+			printf("  imulq $8, %%rbx\n");   // Index * 8
+			printf("  addq %%rbx, %%rax\n"); // Total Offset
+			printf("  addq %%rbp, %%rax\n"); // Absolute Address
+			
+			printf("  movq (%%rax), %%rax\n"); // Dereference
+			printf("  pushq %%rax\n");
+			break;
+		}
+
 		case NODE_ASSIGN:
-			// Calculate the new value
-			gen_asm(node->right);
-			// Store it in the existing slot
-			printf("  popq %%rax\n");
-			printf("  movq %%rax, %d(%%rbp)\n", get_offset(node->var_name));
+			// Check if we are assigning to an ARRAY or a VARIABLE
+			if (node->left && node->left->type == NODE_ARRAY_ACCESS) {
+				// ARRAY WRITE: x[i] = val
+				gen_asm(node->right);      // Pushes Value
+				gen_asm(node->left->left); // Pushes Index
+				
+				int offset = get_offset(node->var_name);
+				printf("  popq %%rbx\n");        // Index
+				printf("  popq %%rax\n");        // Value
+				
+				// Calc Address
+				printf("  movq $%d, %%rcx\n", offset);
+				printf("  imulq $8, %%rbx\n");
+				printf("  addq %%rbx, %%rcx\n");
+				printf("  addq %%rbp, %%rcx\n");
+				
+				printf("  movq %%rax, (%%rcx)\n"); // Store
+			} 
+			else {
+				// STANDARD VARIABLE
+				gen_asm(node->right);
+				printf("  popq %%rax\n");
+				printf("  movq %%rax, %d(%%rbp)\n", get_offset(node->var_name));
+			}
 			break;
 		case NODE_RETURN:
 			gen_asm(node->left);					// value to return is now on stack
@@ -798,30 +990,30 @@ void gen_asm(ASTNode *node) {
 			break;
 		}
 		case NODE_POST_INC: {
-            // Retrieve the variable name from the child node
-            char* var_name = node->left->var_name;
-            int offset = get_offset(var_name);
+			// Retrieve the variable name from the child node
+			char* var_name = node->left->var_name;
+			int offset = get_offset(var_name);
 
-            printf("  movq %d(%%rbp), %%rax\n", offset);	// Load i
-            printf("  incq %%rax\n");						// Increment i
-            printf("  movq %%rax, %d(%%rbp)\n", offset);	// Store i back
-            break;
-        }
-    	case NODE_STRING: {
-    		int label = new_label();
+			printf("  movq %d(%%rbp), %%rax\n", offset);	// Load i
+			printf("  incq %%rax\n");						// Increment i
+			printf("  movq %%rax, %d(%%rbp)\n", offset);	// Store i back
+			break;
+		}
+		case NODE_STRING: {
+			int label = new_label();
 
-    		// Switch to data section to store the bytes
-    		printf("  .section .rodata\n");
-    		printf(".LC%d: .string \"%s\"\n", label, node->var_name);
+			// Switch to data section to store the bytes
+			printf("  .section .rodata\n");
+			printf(".LC%d: .string \"%s\"\n", label, node->var_name);
 
-    		// Switch back to code section
-    		printf("  .section .text\n");
+			// Switch back to code section
+			printf("  .section .text\n");
 
-    		// Load the ADDRESS of the string into rax
-    		printf("  leaq .LC%d(%%rip), %%rax\n", label);
-    		printf("  pushq %%rax\n");
-    		break;
-    	}
+			// Load the ADDRESS of the string into rax
+			printf("  leaq .LC%d(%%rip), %%rax\n", label);
+			printf("  pushq %%rax\n");
+			break;
+		}
 	}
 }
 
@@ -853,11 +1045,12 @@ int main(int argc, char **argv)
 			}
 		} else {
 			input_filename = argv[i];
+			current_filename = input_filename;
 		}
 	}
 
 	if (!input_filename) {
-		printf("Error: No input file specified\n");
+		fprintf(stderr, "Error: No input file specified\n");
 		return 1;
 	}
 

@@ -1,0 +1,16 @@
+fn main() {
+    int a = 0;
+    int b = 1;
+    int i = 0;
+    
+    // Calculate Fibonacci iteratively
+    while i < 12 {
+        int temp = a + b;
+        a = b;
+        b = temp;
+        i++;
+    }
+
+    // Return the result (should be 233)
+    syscall(60, b);
+}

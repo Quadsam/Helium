@@ -1,0 +1,19 @@
+fn main() {
+	// Syscall 2 = OPEN
+	// Arg 1: Filename ("test.txt")
+	// Arg 2: Flags (65 = O_WRONLY | O_CREAT in Linux)
+	// Arg 3: Mode (420 = 0644 octal permissions)
+	// Returns: File Descriptor (fd)
+	
+	int fd = syscall(2, "test.txt", 65, 420);
+
+	if fd > 0 {
+		// Write to the file we just opened
+		syscall(1, fd, "Helium wrote this file!\n", 24);
+		
+		// Close the file
+		syscall(3, fd);
+	}
+
+	syscall(60, 0);
+}
