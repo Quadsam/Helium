@@ -14,7 +14,8 @@ make
 
 ```bash
 ./bin/heliumc -o output.s examples/helloworld.he
-gcc -o output output.s
+nasm -felf64 -o output.o output.s
+ld -o output output.o
 ```
 
 3. Run the executable:

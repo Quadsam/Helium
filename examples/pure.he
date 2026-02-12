@@ -1,0 +1,9 @@
+fn main()
+{
+	// Write "Hi" (fd=1, len=2)
+	int count = syscall(1, 1, "Hi\n", 3);
+
+	// CRITICAL: You must exit manually!
+	// Returning here would crash because there is nowhere to return to.
+	syscall(60, count); 
+}
