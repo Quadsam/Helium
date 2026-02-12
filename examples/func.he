@@ -1,0 +1,17 @@
+// Define a global function
+fn add(a, b)
+{
+	return a + b;
+}
+
+fn main()
+{
+	int x = 10;
+	int y = 20;
+	
+	// Call the function
+	int result = add(x, y);
+	
+	// Exit with result (30)
+	syscall(60, result);
+}
