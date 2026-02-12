@@ -8,7 +8,7 @@ fn read(fd: int, buf: ptr, count: int) -> int
 	return syscall(SYS_read, fd, buf, count);
 }
 
-// Write syscall alias
+// Write to a fd
 fn write(fd: int, str: ptr, count: int) -> int
 {
 	return syscall(SYS_write, fd, str, count);

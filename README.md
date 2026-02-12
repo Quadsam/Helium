@@ -150,8 +150,8 @@ The compiler comes with a lightweight standard library that wraps common syscall
 | `print(str: ptr)` | Prints a string to stdout. |
 | `print_int(n: int)` | Prints a signed integer. |
 | `strlen(str: ptr)` | Returns the length of a string. |
-| `read(fd: int, buf: ptr, count: int)` | Exits the program with the given status code. |
-| `write(fd: int, str: ptr, count: int)` | Exits the program with the given status code. |
+| `read(fd: int, buf: ptr, count: int)` | Read count bytes from fd to buffer buf. |
+| `write(fd: int, str: ptr, count: int)` | Write count bytes to fd from buffer str. |
 | `exit(code: int)` | Exits the program with the given status code. |
 
 ---
