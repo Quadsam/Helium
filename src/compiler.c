@@ -20,33 +20,35 @@ int current_col = 1;
 
 typedef enum {
 	TOKEN_EOF,
-	TOKEN_INT,          // 123
-	TOKEN_IDENTIFIER,   // x, main, count
-	TOKEN_FN,           // fn
-	TOKEN_INT_TYPE,     // int
-	TOKEN_RETURN,       // return
-	TOKEN_LPAREN,       // (
-	TOKEN_RPAREN,       // )
-	TOKEN_LBRACE,       // {
-	TOKEN_RBRACE,       // }
+	TOKEN_INT,			// 123
+	TOKEN_IDENTIFIER,	// x, main, count
+	TOKEN_FN,			// fn
+	TOKEN_INT_TYPE,		// int
+	TOKEN_RETURN,		// return
+	TOKEN_LPAREN,		// (
+	TOKEN_RPAREN,		// )
+	TOKEN_LBRACE,		// {
+	TOKEN_RBRACE,		// }
 	TOKEN_LBRACKET,		// [
 	TOKEN_RBRACKET,		// ]
 	TOKEN_COMMA,		// ,
-	TOKEN_SEMI,         // ;
-	TOKEN_ASSIGN,       // =
-	TOKEN_PLUS,         // +
+	TOKEN_SEMI,			// ;
+	TOKEN_COLON,		// :
+	TOKEN_ASSIGN,		// =
+	TOKEN_PLUS,			// +
 	TOKEN_INC,			// ++
-	TOKEN_MINUS,        // -
-	TOKEN_STAR,         // *
-	TOKEN_SLASH,        // /
-	TOKEN_EQ,           // ==
-	TOKEN_NEQ,          // !=
-	TOKEN_LT,           // <
-	TOKEN_GT,           // >
-	TOKEN_IF,           // if
-	TOKEN_ELSE,         // else
-	TOKEN_WHILE,        // while
-	TOKEN_SYSCALL,      // syscall
+	TOKEN_MINUS,		// -
+	TOKEN_STAR,			// *
+	TOKEN_SLASH,		// /
+	TOKEN_EQ,			// ==
+	TOKEN_NEQ,			// !=
+	TOKEN_LT,			// <
+	TOKEN_GT,			// >
+	TOKEN_ARROW,		// ->
+	TOKEN_IF,			// if
+	TOKEN_ELSE,			// else
+	TOKEN_WHILE,		// while
+	TOKEN_SYSCALL,		// syscall
 	TOKEN_STRING,		// "string"
 } TokenType;
 
@@ -71,7 +73,7 @@ void error_at(Token token, const char *message)
 
 	// Find the start of the line
 	int line_start = src_pos;	// Start searching backwards from current pos
-	
+
 	int line = 1;
 	int i = 0;
 	while (line < token.line && source_code[i] != '\0') {
@@ -124,7 +126,7 @@ char *read_file(const char *filename)
 	fseek(f, 0, SEEK_END);
 	long length = ftell(f);
 	fseek(f, 0, SEEK_SET);
-	
+
 	char *buffer = malloc(length + 1);
 	fread(buffer, 1, length, f);
 	buffer[length] = '\0';
@@ -178,7 +180,7 @@ Token get_next_token()
 
 		return t;
 	}
-	
+
 	// Handle Integers
 	if (isdigit(current)) {
 		Token t;
@@ -196,7 +198,7 @@ Token get_next_token()
 	// Handle Symbols
 	// We increment src_pos and current_col for single chars
 	// For multi-chars (e.g., // or ++), we handle inside.
-	
+
 	switch (current) {
 		// Single char tokens
 		case '(': src_pos++; current_col++; return (Token){TOKEN_LPAREN, "(", 0, start_line, start_col};
@@ -207,6 +209,7 @@ Token get_next_token()
 		case ']': src_pos++; current_col++; return (Token){TOKEN_RBRACKET, "]", 0, start_line, start_col};
 		case ',': src_pos++; current_col++; return (Token){TOKEN_COMMA, ",", 0, start_line, start_col};
 		case ';': src_pos++; current_col++; return (Token){TOKEN_SEMI, ";", 0, start_line, start_col};
+		case ':': src_pos++; current_col++; return (Token){TOKEN_COLON, ":", 0, start_line, start_col};
 		case '*': src_pos++; current_col++; return (Token){TOKEN_STAR, "*", 0, start_line, start_col};
 		// Division or Comment
 		case '/': 
@@ -222,7 +225,13 @@ Token get_next_token()
 			}
 			src_pos++; current_col++; 
 			return (Token){TOKEN_SLASH, "/", 0, start_line, start_col};
-		case '-': src_pos++; current_col++; return (Token){TOKEN_MINUS, "-", 0, start_line, start_col};
+		case '-': 
+			if (source_code[src_pos+1] == '>') {
+				src_pos+=2; current_col+=2; 
+				return (Token){TOKEN_ARROW, "->", 0, start_line, start_col};
+			}
+			src_pos++; current_col++; 
+			return (Token){TOKEN_MINUS, "-", 0, start_line, start_col};
 		case '+': 
 			if (source_code[src_pos+1] == '+') {
 				src_pos+=2; current_col+=2; 
@@ -253,7 +262,7 @@ Token get_next_token()
 			t.type = TOKEN_STRING;
 			t.line = start_line;
 			t.column = start_col;
-			
+
 			src_pos++; current_col++;	// Skip opening "
 			int i = 0;
 			while (source_code[src_pos] != '"' && source_code[src_pos] != '\0') {
@@ -341,13 +350,13 @@ ASTNode *parse_syscall();
 ASTNode *parse_if()
 {
 	advance(); // Skip 'if'
-	
+
 	// Parse Condition (no parens required in Helium)
 	ASTNode *condition = parse_expression();
-	
+
 	// Parse 'If' Body
 	ASTNode *if_body = parse_block();
-	
+
 	// Handle 'Else' (Optional)
 	ASTNode *else_body = NULL;
 	if (current_token.type == TOKEN_ELSE) {
@@ -359,7 +368,7 @@ ASTNode *parse_if()
 			else_body = parse_block();
 		}
 	}
-	
+
 	ASTNode *node = create_node(NODE_IF);
 	node->left = condition;
 	node->body = if_body;
@@ -370,10 +379,10 @@ ASTNode *parse_if()
 ASTNode *parse_while()
 {
 	advance();	// Skip 'while'
-	
+
 	ASTNode *condition = parse_expression();
 	ASTNode *body = parse_block();
-	
+
 	ASTNode *node = create_node(NODE_WHILE);
 	node->left = condition;
 	node->body = body;
@@ -400,15 +409,15 @@ ASTNode *parse_factor()
 		// Function Call: add(1, 2)
 		if (current_token.type == TOKEN_LPAREN) {
 			advance();	// consume '('
-			
+
 			ASTNode *call_node = create_node(NODE_FUNC_CALL);
 			call_node->var_name = node->var_name; // Reuse name
-			
+
 			// Parse Arguments
 			ASTNode *current_arg = NULL;
 			while (current_token.type != TOKEN_RPAREN) {
 				ASTNode *expr = parse_expression();
-				
+
 				if (call_node->left == NULL) {
 					call_node->left = expr;
 					current_arg = expr;
@@ -416,12 +425,12 @@ ASTNode *parse_factor()
 					current_arg->next = expr;
 					current_arg = expr;
 				}
-				
+
 				if (current_token.type == TOKEN_COMMA) advance();
 				else if (current_token.type != TOKEN_RPAREN) error("Expected ',' or ')'");
 			}
 			advance();	// consume ')'
-			
+
 			free(node);	// Free the original var_ref shell
 			return call_node;
 		}
@@ -432,12 +441,12 @@ ASTNode *parse_factor()
 			ASTNode *index = parse_expression();
 			if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
 			advance();	// consume ']'
-			
+
 			// Convert to ARRAY_ACCESS node
 			ASTNode *array_node = create_node(NODE_ARRAY_ACCESS);
 			array_node->var_name = node->var_name;
 			array_node->left = index; 
-			
+
 			free(node);	// Cleanup
 			return array_node;
 		}
@@ -515,17 +524,17 @@ ASTNode *parse_math()
 ASTNode *parse_comparison()
 {
 	ASTNode *node = parse_math();
-	
+
 	// While current token is <, >, ==, !=
 	while (current_token.type == TOKEN_GT || current_token.type == TOKEN_LT || 
 		   current_token.type == TOKEN_EQ || current_token.type == TOKEN_NEQ) {
-		
+
 		NodeType type;
 		if (current_token.type == TOKEN_GT) type = NODE_GT;
 		if (current_token.type == TOKEN_LT) type = NODE_LT;
 		if (current_token.type == TOKEN_EQ) type = NODE_EQ;
 		if (current_token.type == TOKEN_NEQ) type = NODE_NEQ;
-		
+
 		ASTNode *newNode = create_node(type);
 		newNode->left = node;
 		advance();
@@ -545,9 +554,9 @@ ASTNode *parse_expression()
 
 		if (lhs->type != NODE_VAR_REF && lhs->type != NODE_ARRAY_ACCESS)
 			error("Syntax Error: Invalid l-value. Can only assign to variables or arrays.");
-		
+
 		ASTNode *assign = create_node(NODE_ASSIGN);
-		
+
 		// Handle Array Assignment specifically
 		if (lhs->type == NODE_ARRAY_ACCESS) {
 			assign->left = lhs; 
@@ -561,7 +570,7 @@ ASTNode *parse_expression()
 			assign->left = NULL; 
 			free(lhs); // Free the shell (struct only)
 		}
-		
+
 		assign->right = parse_expression();
 		return assign;
 	}
@@ -572,7 +581,7 @@ ASTNode *parse_expression()
 ASTNode *parse_var_declaration()
 {
 	advance();	// Consume 'int'
-	
+
 	if (current_token.type != TOKEN_IDENTIFIER) error("Expected variable name");
 	char *name = strdup(current_token.name);
 	advance();
@@ -580,17 +589,17 @@ ASTNode *parse_var_declaration()
 	// Check for Array Declaration: int x[10];
 	if (current_token.type == TOKEN_LBRACKET) {
 		advance();	// consume '['
-		
+
 		if (current_token.type != TOKEN_INT) error("Array size must be an integer literal");
 		int size = current_token.value;
 		advance();	// consume size
-		
+
 		if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
 		advance();	// consume ']'
-		
+
 		if (current_token.type != TOKEN_SEMI) error("Expected ';'");
 		advance();	// consume ';'
-		
+
 		ASTNode *node = create_node(NODE_ARRAY_DECL);
 		node->var_name = name;
 		node->int_value = size;
@@ -600,7 +609,7 @@ ASTNode *parse_var_declaration()
 	// Normal Variable Declaration: int x = 5;
 	if (current_token.type != TOKEN_ASSIGN) error("Expected '=' or '['");
 	advance(); // consume '='
-	
+
 	ASTNode *node = create_node(NODE_VAR_DECL);
 	node->var_name = name;
 	node->left = parse_expression();
@@ -677,25 +686,35 @@ ASTNode *parse_function()
 {
 	if (current_token.type != TOKEN_FN) return NULL;
 	advance();	// consume 'fn'
-	
+
 	char *name = strdup(current_token.name);
 	advance();	// consume name
-	
+
 	if (current_token.type != TOKEN_LPAREN) error("Expected '('");
 	advance();	// consume '('
-	
-	// Parse Parameters (a, b, c)
+
+	// Parse Parameters (a: int, b: int)
 	ASTNode *first_param = NULL;
 	ASTNode *current_param = NULL;
-	
+
 	while (current_token.type != TOKEN_RPAREN) {
 		if (current_token.type != TOKEN_IDENTIFIER) error("Expected parameter name");
-		
-		// We reuse NODE_VAR_DECL for parameters
+
+		// Capture Parameter Name
 		ASTNode *param = create_node(NODE_VAR_DECL);
 		param->var_name = strdup(current_token.name);
-		param->left = NULL;	// No default value for params
-		
+		param->left = NULL; 
+		advance(); 
+
+		// Expect Colon
+		if (current_token.type != TOKEN_COLON) error("Expected ':' after parameter name");
+		advance();
+
+		// Expect Type (For now, only 'int' is allowed)
+		if (current_token.type != TOKEN_INT_TYPE) error("Expected parameter type 'int'");
+		advance();
+
+		// Link the parameter node
 		if (first_param == NULL) {
 			first_param = param;
 			current_param = param;
@@ -703,42 +722,47 @@ ASTNode *parse_function()
 			current_param->next = param;
 			current_param = param;
 		}
-		
-		advance();	// consume param name
-		
+
 		if (current_token.type == TOKEN_COMMA) {
 			advance();
 		} else if (current_token.type != TOKEN_RPAREN) {
 			error("Expected ',' or ')'");
 		}
 	}
-	
-	advance();	// consume ')'
-	
+
+	advance(); // consume ')'
+
+	// Parse Return Type (-> int)
+	if (current_token.type == TOKEN_ARROW) {
+		advance(); // consume '->'
+		if (current_token.type != TOKEN_INT_TYPE) error("Expected return type 'int'");
+		advance(); // consume 'int'
+	}
+
 	ASTNode *func = create_node(NODE_FUNCTION);
 	func->var_name = name;
-	func->left = first_param;	// Store params in 'left'
+	func->left = first_param; 
 	func->body = parse_block();
-	
+
 	return func;
 }
 
 ASTNode *parse_syscall()
 {
 	advance();	// Skip 'syscall'
-	
+
 	if (current_token.type != TOKEN_LPAREN)
 		error("Error: Expected '(' after syscall");
 
 	advance();	// Skip '('
-	
+
 	ASTNode *call_node = create_node(NODE_SYSCALL);
 	ASTNode *current_arg = NULL;
 
 	// Parse arguments (comma separated)
 	while (current_token.type != TOKEN_RPAREN) {
 		ASTNode *expr = parse_expression();
-		
+
 		if (call_node->left == NULL) {
 			call_node->left = expr;		// First arg
 			current_arg = expr;
@@ -753,7 +777,7 @@ ASTNode *parse_syscall()
 			error("Error: Expected ',' or ')'");
 		}
 	}
-	
+
 	advance(); // Skip ')'
 	return call_node;
 }
@@ -843,7 +867,7 @@ void gen_asm(ASTNode *node) {
 			int size = node->int_value;
 			int total_size = size * 8;
 			current_stack_offset -= total_size;
-			
+
 			// Register symbol pointing to array start
 			add_symbol(node->var_name);
 			// Fix: add_symbol moves offset by 8, but we want a block. 
@@ -855,14 +879,14 @@ void gen_asm(ASTNode *node) {
 		case NODE_ARRAY_ACCESS: {
 			// READ: val = x[i]
 			gen_asm(node->left); // Pushes index
-			
+
 			int offset = get_offset(node->var_name);
 			printf("  popq %%rbx\n");        // Index in RBX
 			printf("  movq $%d, %%rax\n", offset); // Base offset
 			printf("  imulq $8, %%rbx\n");   // Index * 8
 			printf("  addq %%rbx, %%rax\n"); // Total Offset
 			printf("  addq %%rbp, %%rax\n"); // Absolute Address
-			
+
 			printf("  movq (%%rax), %%rax\n"); // Dereference
 			printf("  pushq %%rax\n");
 			break;
@@ -873,17 +897,17 @@ void gen_asm(ASTNode *node) {
 				// ARRAY WRITE: x[i] = val
 				gen_asm(node->right);      // Pushes Value
 				gen_asm(node->left->left); // Pushes Index
-				
+
 				int offset = get_offset(node->var_name);
 				printf("  popq %%rbx\n");        // Index
 				printf("  popq %%rax\n");        // Value
-				
+
 				// Calc Address
 				printf("  movq $%d, %%rcx\n", offset);
 				printf("  imulq $8, %%rbx\n");
 				printf("  addq %%rbx, %%rcx\n");
 				printf("  addq %%rbp, %%rcx\n");
-				
+
 				printf("  movq %%rax, (%%rcx)\n"); // Store
 			} 
 			else {
@@ -903,10 +927,10 @@ void gen_asm(ASTNode *node) {
 		case NODE_BINOP:
 			gen_asm(node->left);
 			gen_asm(node->right);
-			
+
 			printf("  popq %%rbx\n");				// Right operand
 			printf("  popq %%rax\n");				// Left operand
-			
+
 			if (node->op == '+') printf("  addq %%rbx, %%rax\n");
 			if (node->op == '-') printf("  subq %%rbx, %%rax\n");
 			if (node->op == '*') printf("  imulq %%rbx, %%rax\n");
@@ -914,7 +938,7 @@ void gen_asm(ASTNode *node) {
 				printf("  cqto\n");					// sign extend rax to rdx:rax
 				printf("  idivq %%rbx\n");
 			}
-			
+
 			printf("  pushq %%rax\n");
 			break;
 		case NODE_BLOCK:
@@ -934,17 +958,17 @@ void gen_asm(ASTNode *node) {
 				arg_count++;
 				arg = arg->next;
 			}
-			
+
 			// Pop into Registers (Reverse order because stack is LIFO)
 			// System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9
 			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-			
+
 			for (int i = arg_count - 1; i >= 0; i--) {
 				if (i < 6) {
 					printf("  popq %%%s\n", regs[i]);
 				}
 			}
-			
+
 			// 3. Call the function
 			printf("  call %s\n", node->var_name);
 			printf("  pushq %%rax\n"); // Push return value
@@ -955,7 +979,7 @@ void gen_asm(ASTNode *node) {
 			// This ensures 'x' in main doesn't conflict with 'x' in this function
 			symbol_count = 0;
 			current_stack_offset = 0;
-			
+
 			printf(".global %s\n", node->var_name);
 			printf("%s:\n", node->var_name);
 			printf("  pushq %%rbp\n");
@@ -967,23 +991,23 @@ void gen_asm(ASTNode *node) {
 			ASTNode *param = node->left;
 			int param_idx = 0;
 			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-			
+
 			while (param) {
 				// Create stack space for the param
 				add_symbol(param->var_name);
 				int offset = get_offset(param->var_name);
-				
+
 				// Move register to stack
 				if (param_idx < 6) {
 					printf("  movq %%%s, %d(%%rbp)\n", regs[param_idx], offset);
 				}
-				
+
 				param = param->next;
 				param_idx++;
 			}
-			
+
 			gen_asm(node->body);
-			
+
 			// Epilogue
 			printf("  movq %%rbp, %%rsp\n");
 			printf("  popq %%rbp\n");
@@ -1053,25 +1077,25 @@ void gen_asm(ASTNode *node) {
 		case NODE_SYSCALL: {
 			int arg_count = 0;
 			ASTNode* arg = node->left;
-			
+
 			while (arg) {
 				gen_asm(arg);	// Evaluates arg and pushes result to stack
 				arg_count++;
 				arg = arg->next;
 			}
-			
+
 			const char* regs[] = {"rdi", "rsi", "rdx", "r10", "r8", "r9"};
-			
+
 			// We need to pop into the correct register.
 			// Since stack has ArgN on top, we need to map:
 			// Pop -> regs[arg_count - 1]
 			// Pop -> regs[arg_count - 2]
 			// ...
-			
+
 			// The first arg is actually the Syscall Number (rax) for Linux?
 			// User syntax: syscall(60, 0) -> 60 is rax, 0 is rdi.
 			// Let's assume the first argument in user code IS the syscall number.
-			
+
 			for (int i = arg_count - 1; i >= 0; i--) {
 				if (i == 0) {
 					printf("  popq %%rax\n"); // The syscall number
@@ -1082,7 +1106,7 @@ void gen_asm(ASTNode *node) {
 					}
 				}
 			}
-			
+
 			printf("  syscall\n");
 			printf("  pushq %%rax\n"); // Push return value (result/error)
 			break;
@@ -1154,7 +1178,7 @@ int main(int argc, char **argv)
 
 	// Read Input
 	source_code = read_file(input_filename);
-	
+
 	// Prime the lexer
 	advance(); 
 
@@ -1169,7 +1193,7 @@ int main(int argc, char **argv)
 
 	// Write the assembly header (required for linking)
 	printf(".section .text\n");
-	
+
 	// Keep parsing until end of file
 	while (current_token.type != TOKEN_EOF) {
 		if (current_token.type == TOKEN_FN) {

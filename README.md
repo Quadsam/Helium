@@ -27,11 +27,7 @@ gcc -o output output.s
 
 ## TODO:
 
-1. **Global Functions**: Currently main is the only function we parse properly.
-
-2. **Function Arguments**: We can't define fn add(int a, int b).
-
-3. Dealing with ~~syscall and~~ asm
+1. Dealing with ~~syscall and~~ asm
 	- [x] syscall: Map this directly to the x86 syscall instruction. Ensure arguments are moved into the correct registers (rdi, rsi, rdx, r10, r8, r9) before the instruction is emitted.
 	- [ ] asm: Treat the asm block as a raw string and literally print it into the `.s` output file during code generation.
 
@@ -66,8 +62,7 @@ We use `else if`
 
 Definitions should look like this: `fn add(a: int, b: int) -> int { ... }`
 
-4. Type System
-	For the V1 compiler, types are limited to what can fit directly on x86-64 registers:
+4. **Type System**: For the V1 compiler, types are limited to what can fit directly on x86-64 registers:
 	- `int`  (64-bit integer, maps to `rax`)
 	- `char` (8-bit unsigned, for chars/strings)
 	- `ptr`  (generic pointer)
