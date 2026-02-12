@@ -928,15 +928,22 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_FUNCTION:
-			// Reset symbol table
-			symbol_count = 0;
-			current_stack_offset = 0;
+            // Reset symbol table
+            symbol_count = 0;
+            current_stack_offset = 0;
 
-			printf("global %s\n", node->var_name);
-			printf("%s:\n", node->var_name);
-			printf("  push rbp\n");
-			printf("  mov rbp, rsp\n");
-			printf("  sub rsp, 256\n"); // Reserve stack space
+            // CHECK FOR MAIN -> _start
+            if (strcmp(node->var_name, "main") == 0) {
+                printf("global _start\n");
+                printf("_start:\n");
+            } else {
+                printf("global %s\n", node->var_name);
+                printf("%s:\n", node->var_name);
+            }
+
+            printf("  push rbp\n");
+            printf("  mov rbp, rsp\n");
+            printf("  sub rsp, 256\n"); // Reserve stack space
 
 			// Handle Parameters (Move registers to stack)
 			ASTNode *param = node->left;
@@ -1061,7 +1068,7 @@ void gen_asm(ASTNode *node) {
 
 			printf("  section .rodata\n");
 			// NASM string syntax: db "string", 0
-			printf(".LC%d: db \"%s\", 0\n", label, node->var_name);
+			printf(".LC%d: db `%s`, 0\n", label, node->var_name);
 
 			printf("  section .text\n");
 			printf("  lea rax, [rel .LC%d]\n", label); // Position Independent Code (PIC) access
