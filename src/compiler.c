@@ -1202,7 +1202,7 @@ void gen_asm(ASTNode *node) {
 
 			printf("  push rbp\n");
 			printf("  mov rbp, rsp\n");
-			printf("  sub rsp, 256\n"); // Reserve stack space
+			printf("  sub rsp, 4096\n"); // Reserve stack space
 
 			// Handle Parameters (Move registers to stack)
 			ASTNode *param = node->left;
