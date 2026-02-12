@@ -845,295 +845,272 @@ void gen_asm(ASTNode *node) {
 
 	switch (node->type) {
 		case NODE_INT:
-			printf("  movq $%d, %%rax\n", node->int_value);
-			printf("  pushq %%rax\n");
+			printf("  mov rax, %d\n", node->int_value); // Load immediate
+			printf("  push rax\n");
 			break;
-		case NODE_VAR_REF:
+
+		case NODE_VAR_REF: {
 			int offset = get_offset(node->var_name);
-			printf("  movq %d(%%rbp), %%rax\n", offset);
-			printf("  pushq %%rax\n");
+			printf("  mov rax, [rbp + %d]\n", offset); // Load from stack
+			printf("  push rax\n");
 			break;
+		}
+
 		case NODE_VAR_DECL:
-			// Calculate the value (it's pushed to stack)
+			// Calculate value
 			gen_asm(node->left); 
-			// Assign it a slot in our symbol table
+			// Assign symbol
 			add_symbol(node->var_name);
-			// Move it from stack to local variable slot
-			printf("  popq %%rax\n");
-			printf("  movq %%rax, %d(%%rbp)\n", get_offset(node->var_name));
+			// Move from stack to local variable slot
+			printf("  pop rax\n");
+			printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
 			break;
-		case NODE_ARRAY_DECL: {
-			// Reserve space: size * 8 bytes
-			int size = node->int_value;
-			int total_size = size * 8;
-			current_stack_offset -= total_size;
 
-			// Register symbol pointing to array start
-			add_symbol(node->var_name);
-			// Fix: add_symbol moves offset by 8, but we want a block. 
-			// We manually adjusted offset above, so let's overwrite the symbol logic slightly
-			// to point to the *start* of the block we just reserved.
-			symbols[symbol_count-1].offset = current_stack_offset; 
-			break;
-		}
-		case NODE_ARRAY_ACCESS: {
-			// READ: val = x[i]
-			gen_asm(node->left); // Pushes index
-
-			int offset = get_offset(node->var_name);
-			printf("  popq %%rbx\n");        // Index in RBX
-			printf("  movq $%d, %%rax\n", offset); // Base offset
-			printf("  imulq $8, %%rbx\n");   // Index * 8
-			printf("  addq %%rbx, %%rax\n"); // Total Offset
-			printf("  addq %%rbp, %%rax\n"); // Absolute Address
-
-			printf("  movq (%%rax), %%rax\n"); // Dereference
-			printf("  pushq %%rax\n");
-			break;
-		}
 		case NODE_ASSIGN:
-			// Check if we are assigning to an ARRAY or a VARIABLE
+			// Check for ARRAY or VARIABLE assignment
 			if (node->left && node->left->type == NODE_ARRAY_ACCESS) {
 				// ARRAY WRITE: x[i] = val
-				gen_asm(node->right);      // Pushes Value
-				gen_asm(node->left->left); // Pushes Index
+				gen_asm(node->right);      // Push Value
+				gen_asm(node->left->left); // Push Index
 
 				int offset = get_offset(node->var_name);
-				printf("  popq %%rbx\n");        // Index
-				printf("  popq %%rax\n");        // Value
+				printf("  pop rbx\n");        // Index
+				printf("  pop rax\n");        // Value
 
-				// Calc Address
-				printf("  movq $%d, %%rcx\n", offset);
-				printf("  imulq $8, %%rbx\n");
-				printf("  addq %%rbx, %%rcx\n");
-				printf("  addq %%rbp, %%rcx\n");
+				// Calc Address: rbp + offset + (index * 8)
+				printf("  mov rcx, %d\n", offset);
+				printf("  imul rbx, 8\n");
+				printf("  add rcx, rbx\n");
+				printf("  add rcx, rbp\n");
 
-				printf("  movq %%rax, (%%rcx)\n"); // Store
+				printf("  mov [rcx], rax\n"); // Store
 			} 
 			else {
 				// STANDARD VARIABLE
 				gen_asm(node->right);
-				printf("  popq %%rax\n");
-				printf("  movq %%rax, %d(%%rbp)\n", get_offset(node->var_name));
+				printf("  pop rax\n");
+				printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
 			}
 			break;
+
 		case NODE_RETURN:
-			gen_asm(node->left);					// value to return is now on stack
-			printf("  popq %%rax\n");				// move to rax (return register)
-			printf("  movq %%rbp, %%rsp\n");		// Restore stack pointer
-			printf("  popq %%rbp\n");				// Restore base pointer
+			gen_asm(node->left);        // Value to return is now on stack
+			printf("  pop rax\n");      // Move to rax
+			printf("  mov rsp, rbp\n"); // Restore stack pointer
+			printf("  pop rbp\n");      // Restore base pointer
 			printf("  ret\n");
 			break;
+
 		case NODE_BINOP:
 			gen_asm(node->left);
 			gen_asm(node->right);
 
-			printf("  popq %%rbx\n");				// Right operand
-			printf("  popq %%rax\n");				// Left operand
+			printf("  pop rbx\n"); // Right operand
+			printf("  pop rax\n"); // Left operand
 
-			if (node->op == '+') printf("  addq %%rbx, %%rax\n");
-			if (node->op == '-') printf("  subq %%rbx, %%rax\n");
-			if (node->op == '*') printf("  imulq %%rbx, %%rax\n");
+			if (node->op == '+') printf("  add rax, rbx\n");
+			if (node->op == '-') printf("  sub rax, rbx\n");
+			if (node->op == '*') printf("  imul rax, rbx\n");
 			if (node->op == '/') {
-				printf("  cqto\n");					// sign extend rax to rdx:rax
-				printf("  idivq %%rbx\n");
+				printf("  cqo\n");     // Sign extend rax to rdx:rax (NASM equivalent of cqto)
+				printf("  idiv rbx\n");
 			}
 
-			printf("  pushq %%rax\n");
+			printf("  push rax\n");
 			break;
+
 		case NODE_BLOCK:
-			// Iterate through the linked list of statements
 			ASTNode *stmt = node->left;
 			while (stmt) {
 				gen_asm(stmt);
 				stmt = stmt->next;
 			}
 			break;
-		case NODE_FUNC_CALL: {
-			// Evaluate Arguments
-			int arg_count = 0;
-			ASTNode* arg = node->left;
-			while (arg) {
-				gen_asm(arg);	// Push arg to stack
-				arg_count++;
-				arg = arg->next;
-			}
 
-			// Pop into Registers (Reverse order because stack is LIFO)
-			// System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9
-			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-
-			for (int i = arg_count - 1; i >= 0; i--) {
-				if (i < 6) {
-					printf("  popq %%%s\n", regs[i]);
-				}
-			}
-
-			// 3. Call the function
-			printf("  call %s\n", node->var_name);
-			printf("  pushq %%rax\n"); // Push return value
-			break;
-		}
 		case NODE_FUNCTION:
-			// RESET SYMBOL TABLE FOR NEW FUNCTION
-			// This ensures 'x' in main doesn't conflict with 'x' in this function
+			// Reset symbol table
 			symbol_count = 0;
 			current_stack_offset = 0;
 
-			printf(".global %s\n", node->var_name);
+			printf("global %s\n", node->var_name);
 			printf("%s:\n", node->var_name);
-			printf("  pushq %%rbp\n");
-			printf("  movq %%rsp, %%rbp\n");
-			printf("  subq $256, %%rsp\n"); // Reserve stack space
+			printf("  push rbp\n");
+			printf("  mov rbp, rsp\n");
+			printf("  sub rsp, 256\n"); // Reserve stack space
 
-			// HANDLE PARAMETERS
-			// Move registers (rdi, rsi...) onto the stack as local variables
+			// Handle Parameters (Move registers to stack)
 			ASTNode *param = node->left;
 			int param_idx = 0;
 			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
 			while (param) {
-				// Create stack space for the param
 				add_symbol(param->var_name);
 				int offset = get_offset(param->var_name);
 
-				// Move register to stack
 				if (param_idx < 6) {
-					printf("  movq %%%s, %d(%%rbp)\n", regs[param_idx], offset);
+					printf("  mov [rbp + %d], %s\n", offset, regs[param_idx]);
 				}
-
 				param = param->next;
 				param_idx++;
 			}
 
 			gen_asm(node->body);
 
-			// Epilogue
-			printf("  movq %%rbp, %%rsp\n");
-			printf("  popq %%rbp\n");
+			// Epilogue safety
+			printf("  mov rsp, rbp\n");
+			printf("  pop rbp\n");
 			printf("  ret\n");
 			break;
+
 		case NODE_IF: {
 			int label_else = new_label();
 			int label_end = new_label();
 
-			// 1. Condition
-			gen_asm(node->left);
-			printf("  popq %%rax\n");
-			printf("  cmpq $0, %%rax\n");			// Is condition false (0)?
-			printf("  je .L%d\n", label_else);		// Jump to Else if false
+			gen_asm(node->left); // Condition
+			printf("  pop rax\n");
+			printf("  cmp rax, 0\n");
+			printf("  je .L%d\n", label_else); // Jump if 0 (False)
 
-			// 2. If Body
 			gen_asm(node->body);
-			printf("  jmp .L%d\n", label_end);		// Skip Else
+			printf("  jmp .L%d\n", label_end);
 
-			// 3. Else Body
 			printf(".L%d:\n", label_else);
 			if (node->right) {
 				gen_asm(node->right);
 			}
 
-			// 4. End
 			printf(".L%d:\n", label_end);
 			break;
 		}
+
 		case NODE_WHILE: {
 			int label_start = new_label();
 			int label_end = new_label();
 
-			printf(".L%d:\n", label_start);			// Start of loop
+			printf(".L%d:\n", label_start);
 
-			// 1. Condition
 			gen_asm(node->left);
-			printf("  popq %%rax\n");
-			printf("  cmpq $0, %%rax\n");
-			printf("  je .L%d\n", label_end);		// Exit if false
+			printf("  pop rax\n");
+			printf("  cmp rax, 0\n");
+			printf("  je .L%d\n", label_end);
 
-			// 2. Body
 			gen_asm(node->body);
-			printf("  jmp .L%d\n", label_start);	// Loop back
+			printf("  jmp .L%d\n", label_start);
 
 			printf(".L%d:\n", label_end);
 			break;
 		}
-		// x86 comparison sets flags (EFLAGS). 'setX' instruction sets a byte register based on flags.
+
 		case NODE_GT:
 		case NODE_LT:
 		case NODE_EQ:
 		case NODE_NEQ:
 			gen_asm(node->left);
 			gen_asm(node->right);
-			printf("  popq %%rbx\n");			// Right
-			printf("  popq %%rax\n");			// Left
-			printf("  cmpq %%rbx, %%rax\n");	// Compare Left - Right
-			// Set AL to 1 if true, 0 if false
-			if (node->type == NODE_EQ) printf("  sete %%al\n");
-			if (node->type == NODE_NEQ) printf("  setne %%al\n");
-			if (node->type == NODE_GT) printf("  setg %%al\n");
-			if (node->type == NODE_LT) printf("  setl %%al\n");
-			printf("  movzbq %%al, %%rax\n");	// Zero-extend byte to 64-bit
-			printf("  pushq %%rax\n");
+			printf("  pop rbx\n");
+			printf("  pop rax\n");
+			printf("  cmp rax, rbx\n");
+
+			if (node->type == NODE_EQ) printf("  sete al\n");
+			if (node->type == NODE_NEQ) printf("  setne al\n");
+			if (node->type == NODE_GT) printf("  setg al\n");
+			if (node->type == NODE_LT) printf("  setl al\n");
+
+			printf("  movzx rax, al\n"); // Zero-extend byte
+			printf("  push rax\n");
 			break;
+
 		case NODE_SYSCALL: {
 			int arg_count = 0;
 			ASTNode* arg = node->left;
-
 			while (arg) {
-				gen_asm(arg);	// Evaluates arg and pushes result to stack
+				gen_asm(arg); 
 				arg_count++;
 				arg = arg->next;
 			}
 
 			const char* regs[] = {"rdi", "rsi", "rdx", "r10", "r8", "r9"};
 
-			// We need to pop into the correct register.
-			// Since stack has ArgN on top, we need to map:
-			// Pop -> regs[arg_count - 1]
-			// Pop -> regs[arg_count - 2]
-			// ...
-
-			// The first arg is actually the Syscall Number (rax) for Linux?
-			// User syntax: syscall(60, 0) -> 60 is rax, 0 is rdi.
-			// Let's assume the first argument in user code IS the syscall number.
-
 			for (int i = arg_count - 1; i >= 0; i--) {
 				if (i == 0) {
-					printf("  popq %%rax\n"); // The syscall number
+					printf("  pop rax\n"); // Syscall number
 				} else {
-					// Map argument i to register i-1 (since 0 is rax)
 					if (i-1 < 6) {
-						printf("  popq %%%s\n", regs[i-1]);
+						printf("  pop %s\n", regs[i-1]);
 					}
 				}
 			}
 
 			printf("  syscall\n");
-			printf("  pushq %%rax\n"); // Push return value (result/error)
+			printf("  push rax\n"); // Return value
 			break;
 		}
+
 		case NODE_POST_INC: {
-			// Retrieve the variable name from the child node
 			char* var_name = node->left->var_name;
 			int offset = get_offset(var_name);
 
-			printf("  movq %d(%%rbp), %%rax\n", offset);	// Load i
-			printf("  incq %%rax\n");						// Increment i
-			printf("  movq %%rax, %d(%%rbp)\n", offset);	// Store i back
+			printf("  mov rax, [rbp + %d]\n", offset);
+			printf("  inc rax\n");
+			printf("  mov [rbp + %d], rax\n", offset);
 			break;
 		}
+
 		case NODE_STRING: {
 			int label = new_label();
 
-			// Switch to data section to store the bytes
-			printf("  .section .rodata\n");
-			printf(".LC%d: .string \"%s\"\n", label, node->var_name);
+			printf("  section .rodata\n");
+			// NASM string syntax: db "string", 0
+			printf(".LC%d: db \"%s\", 0\n", label, node->var_name);
 
-			// Switch back to code section
-			printf("  .section .text\n");
+			printf("  section .text\n");
+			printf("  lea rax, [rel .LC%d]\n", label); // Position Independent Code (PIC) access
+			printf("  push rax\n");
+			break;
+		}
 
-			// Load the ADDRESS of the string into rax
-			printf("  leaq .LC%d(%%rip), %%rax\n", label);
-			printf("  pushq %%rax\n");
+		case NODE_ARRAY_DECL: {
+			int size = node->int_value;
+			int total_size = size * 8;
+			current_stack_offset -= total_size;
+			add_symbol(node->var_name);
+			symbols[symbol_count-1].offset = current_stack_offset; 
+			break;
+		}
+
+		case NODE_ARRAY_ACCESS: {
+			gen_asm(node->left); // Push Index
+
+			int offset = get_offset(node->var_name);
+			printf("  pop rbx\n"); // Index
+			printf("  mov rax, %d\n", offset);
+			printf("  imul rbx, 8\n");
+			printf("  add rax, rbx\n");
+			printf("  add rax, rbp\n");
+
+			printf("  mov rax, [rax]\n"); // Dereference
+			printf("  push rax\n");
+			break;
+		}
+
+		case NODE_FUNC_CALL: {
+			int arg_count = 0;
+			ASTNode* arg = node->left;
+			while (arg) {
+				gen_asm(arg); 
+				arg_count++;
+				arg = arg->next;
+			}
+
+			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+			for (int i = arg_count - 1; i >= 0; i--) {
+				if (i < 6) {
+					printf("  pop %s\n", regs[i]);
+				}
+			}
+
+			printf("  call %s\n", node->var_name);
+			printf("  push rax\n");
 			break;
 		}
 	}
@@ -1192,7 +1169,7 @@ int main(int argc, char **argv)
 	}
 
 	// Write the assembly header (required for linking)
-	printf(".section .text\n");
+	printf("section .text\n");
 
 	// Keep parsing until end of file
 	while (current_token.type != TOKEN_EOF) {
