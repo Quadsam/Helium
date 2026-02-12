@@ -1,0 +1,17 @@
+fn main()
+{
+	int x = 10;
+	int y = 20;
+	
+	// Create a pointer to x
+	int p = &x;
+	
+	// Read via pointer
+	int val = *p; 
+	
+	// Write via pointer (modify x)
+	*p = 50;
+	
+	// Exit with x (should be 50)
+	syscall(60, x);
+}

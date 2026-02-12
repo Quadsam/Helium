@@ -1,0 +1,18 @@
+fn main()
+{
+	int i = 0;
+	int target = 1000000;
+	
+	while i < target {
+		i++;
+	}
+	
+	// Verify by exiting with a small number (target % 100)
+	// 1000000 is divisible by 100, so result should be 0.
+	// Let's make it fail if it's wrong.
+	if i == target {
+		syscall(60, 42); // Success!
+	} else {
+		syscall(60, 1);  // Fail
+	}
+}

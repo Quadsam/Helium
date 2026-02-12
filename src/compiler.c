@@ -3,64 +3,91 @@
 #include <ctype.h>
 #include <string.h>
 
-
-/* ========================================================================= */
-/* GLOBAL STATE                                                              */
-/* ========================================================================= */
-
-char *source_code;
-char *current_filename = "unknown";	// Default
-int src_pos = 0;
-int current_line = 1;
-int current_col = 1;
-
 /* ========================================================================= */
 /* TOKENS                                                                    */
 /* ========================================================================= */
 
 typedef enum {
 	TOKEN_EOF,
-	TOKEN_INT,			// 123
-	TOKEN_IDENTIFIER,	// x, main, count
-	TOKEN_FN,			// fn
-	TOKEN_INT_TYPE,		// int
-	TOKEN_RETURN,		// return
-	TOKEN_LPAREN,		// (
-	TOKEN_RPAREN,		// )
-	TOKEN_LBRACE,		// {
-	TOKEN_RBRACE,		// }
-	TOKEN_LBRACKET,		// [
-	TOKEN_RBRACKET,		// ]
-	TOKEN_COMMA,		// ,
-	TOKEN_SEMI,			// ;
-	TOKEN_COLON,		// :
-	TOKEN_ASSIGN,		// =
-	TOKEN_PLUS,			// +
-	TOKEN_INC,			// ++
-	TOKEN_MINUS,		// -
-	TOKEN_STAR,			// *
-	TOKEN_SLASH,		// /
-	TOKEN_EQ,			// ==
-	TOKEN_NEQ,			// !=
-	TOKEN_LT,			// <
-	TOKEN_GT,			// >
-	TOKEN_ARROW,		// ->
-	TOKEN_IF,			// if
-	TOKEN_ELSE,			// else
-	TOKEN_WHILE,		// while
-	TOKEN_SYSCALL,		// syscall
-	TOKEN_STRING,		// "string"
+	TOKEN_INT,          // 123
+	TOKEN_IDENTIFIER,   // x, main, count
+	TOKEN_FN,           // fn
+	TOKEN_INT_TYPE,     // int
+	TOKEN_PTR_TYPE,     // ptr
+	TOKEN_RETURN,       // return
+	TOKEN_LPAREN,       // (
+	TOKEN_RPAREN,       // )
+	TOKEN_LBRACE,       // {
+	TOKEN_RBRACE,       // }
+	TOKEN_LBRACKET,     // [
+	TOKEN_RBRACKET,     // ]
+	TOKEN_COMMA,        // ,
+	TOKEN_SEMI,         // ;
+	TOKEN_COLON,        // :
+	TOKEN_ASSIGN,       // =
+	TOKEN_PLUS,         // +
+	TOKEN_INC,          // ++
+	TOKEN_MINUS,        // -
+	TOKEN_STAR,         // *
+	TOKEN_SLASH,        // /
+	TOKEN_PIPE,			// |
+	TOKEN_AMP,          // &
+	TOKEN_EQ,           // ==
+	TOKEN_NEQ,          // !=
+	TOKEN_LT,           // <
+	TOKEN_GT,           // >
+	TOKEN_ARROW,        // ->
+	TOKEN_IF,           // if
+	TOKEN_ELSE,         // else
+	TOKEN_WHILE,        // while
+	TOKEN_SYSCALL,      // syscall
+	TOKEN_STRING,       // "string"
 } TokenType;
 
 typedef struct {
 	TokenType type;
 	char name[256]; // To store "main", "count", "int", exc.
 	int value;      // For integers
-	int line;		// For error handling
-	int column;		// For error handling
+	int line;       // For error handling
+	int column;     // For error handling
 } Token;
 
 Token current_token;
+
+/* ========================================================================= */
+/* GLOBAL STATE                                                              */
+/* ========================================================================= */
+
+char *source_code;
+char *current_filename = "unknown"; // Default
+int src_pos = 0;
+int current_line = 1;
+int current_col = 1;
+
+// Simple Macro Table
+typedef struct {
+	char name[64];
+	Token value;	// We store the token it represents
+} Macro;
+
+Macro macros[100];
+int macro_count = 0;
+
+void add_macro(char *name, Token value)
+{
+	strcpy(macros[macro_count].name, name);
+	macros[macro_count].value = value;
+	macro_count++;
+}
+
+Token *get_macro(char *name)
+{
+	for (int i = 0; i < macro_count; i++) {
+		if (strcmp(macros[i].name, name) == 0)
+			return &macros[i].value;
+	}
+	return NULL;
+}
 
 /* ========================================================================= */
 /* ERROR HANDLING                                                            */
@@ -72,7 +99,7 @@ void error_at(Token token, const char *message)
 			current_filename, token.line, token.column, message);
 
 	// Find the start of the line
-	int line_start = src_pos;	// Start searching backwards from current pos
+	int line_start = src_pos;   // Start searching backwards from current pos
 
 	int line = 1;
 	int i = 0;
@@ -89,14 +116,14 @@ void error_at(Token token, const char *message)
 	}
 
 	// Print the source line
-	fprintf(stderr, "\t");	// Indent
+	fprintf(stderr, "\t");  // Indent
 	for (int j = line_start; j < line_end; j++) {
 		fputc(source_code[j], stderr);
 	}
 	fprintf(stderr, "\n");
 
 	// Print the caret (^) pointing to the column
-	fprintf(stderr, "\t");	// Match indent
+	fprintf(stderr, "\t");  // Match indent
 	for (int j = 1; j < token.column; j++) {
 		fputc(' ', stderr);
 	}
@@ -112,31 +139,80 @@ void error(const char *message)
 }
 
 /* ========================================================================= */
-/* LEXER                                                                     */
+/* PREPROCESSOR (Includes)                                                   */
 /* ========================================================================= */
 
-// Helper to read the whole file into memory
-char *read_file(const char *filename)
+// Helper to append string to buffer, resizing if necessary
+void append_string(char **buffer, int *length, int *capacity, const char *str)
+{
+	int str_len = strlen(str);
+	if (*length + str_len >= *capacity) {
+		*capacity = (*capacity == 0) ? 1024 : *capacity * 2;
+		while (*length + str_len >= *capacity) *capacity *= 2;
+		*buffer = realloc(*buffer, *capacity);
+	}
+	strcpy(*buffer + *length, str);
+	*length += str_len;
+}
+
+// Recursive function to handle #include
+char *preprocess_file(const char *filename)
 {
 	FILE *f = fopen(filename, "r");
 	if (!f) {
 		fprintf(stderr, "Error: Could not open file %s\n", filename);
 		exit(1);
 	}
-	fseek(f, 0, SEEK_END);
-	long length = ftell(f);
-	fseek(f, 0, SEEK_SET);
 
-	char *buffer = malloc(length + 1);
-	fread(buffer, 1, length, f);
-	buffer[length] = '\0';
+	char *buffer = NULL;
+	int length = 0;
+	int capacity = 0;
+
+	char line[1024];
+	while (fgets(line, sizeof(line), f)) {
+		// Check for #include "filename"
+		// We look for: #, then include, then quote
+		char *include_ptr = strstr(line, "#include");
+		
+		if (include_ptr) {
+			// Found an include! Extract filename.
+			char *start_quote = strchr(line, '"');
+			char *end_quote = strrchr(line, '"');
+			
+			if (start_quote && end_quote && end_quote > start_quote) {
+				// Terminate the string at the end quote
+				*end_quote = '\0';
+				char *included_filename = start_quote + 1;
+				
+				// Recursively read the included file
+				char *included_content = preprocess_file(included_filename);
+				
+				// Append the content instead of the #include line
+				append_string(&buffer, &length, &capacity, included_content);
+				
+				// Append a newline to be safe
+				append_string(&buffer, &length, &capacity, "\n");
+				
+				free(included_content);
+				continue;	// Skip appending the original #include line
+			}
+		}
+
+		// Normal line, just append it
+		append_string(&buffer, &length, &capacity, line);
+	}
+
 	fclose(f);
 	return buffer;
 }
 
+/* ========================================================================= */
+/* LEXER                                                                     */
+/* ========================================================================= */
+
 Token get_next_token()
 {
-	// 1. Skip Whitespace and count lines
+	// Skip Whitespace and count lines
 	while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) {
 		if (source_code[src_pos] == '\n') {
 			current_line++;
@@ -157,26 +233,39 @@ Token get_next_token()
 
 	char current = source_code[src_pos];
 
-	// Handle Identifiers/Keywords
-	if (isalpha(current)) {
+	// Handle Identifiers/Keywords (Allow _ at start)
+	if (isalpha(current) || current == '_') {
 		Token t;
 		t.line = start_line;
 		t.column = start_col;
 		int i = 0;
-		while (isalnum(source_code[src_pos])) {
+		// Allow alphanumeric OR underscore in the body
+		while (isalnum(source_code[src_pos]) || source_code[src_pos] == '_') {
 			t.name[i++] = source_code[src_pos++];
-			current_col++; // Track column!
+			current_col++; 
 		}
 		t.name[i] = '\0';
 
-		if (strcmp(t.name, "fn")			== 0) t.type = TOKEN_FN;
-		else if (strcmp(t.name, "int")		== 0) t.type = TOKEN_INT_TYPE;
-		else if (strcmp(t.name, "return")	== 0) t.type = TOKEN_RETURN;
-		else if (strcmp(t.name, "if")		== 0) t.type = TOKEN_IF;
-		else if (strcmp(t.name, "else")		== 0) t.type = TOKEN_ELSE;
-		else if (strcmp(t.name, "while")	== 0) t.type = TOKEN_WHILE;
-		else if (strcmp(t.name, "syscall")	== 0) t.type = TOKEN_SYSCALL;
+		if (strcmp(t.name, "fn")            == 0) t.type = TOKEN_FN;
+		else if (strcmp(t.name, "int")      == 0) t.type = TOKEN_INT_TYPE;
+		else if (strcmp(t.name, "ptr")      == 0) t.type = TOKEN_PTR_TYPE;
+		else if (strcmp(t.name, "return")   == 0) t.type = TOKEN_RETURN;
+		else if (strcmp(t.name, "if")       == 0) t.type = TOKEN_IF;
+		else if (strcmp(t.name, "else")     == 0) t.type = TOKEN_ELSE;
+		else if (strcmp(t.name, "while")    == 0) t.type = TOKEN_WHILE;
+		else if (strcmp(t.name, "syscall")  == 0) t.type = TOKEN_SYSCALL;
 		else t.type = TOKEN_IDENTIFIER;
+
+		// CHECK MACROS
+		Token *macro = get_macro(t.name);
+		if (macro) {
+			// Return the stored token (e.g., the INT 100)
+			// But preserve the current line/col info so errors point to the usage
+			Token subst = *macro;
+			subst.line = start_line;
+			subst.column = start_col;
+			return subst;
+		}
 
 		return t;
 	}
@@ -211,6 +300,8 @@ Token get_next_token()
 		case ';': src_pos++; current_col++; return (Token){TOKEN_SEMI, ";", 0, start_line, start_col};
 		case ':': src_pos++; current_col++; return (Token){TOKEN_COLON, ":", 0, start_line, start_col};
 		case '*': src_pos++; current_col++; return (Token){TOKEN_STAR, "*", 0, start_line, start_col};
+		case '|': src_pos++; current_col++; return (Token){TOKEN_PIPE, "|", 0, start_line, start_col};
+		case '&': src_pos++; current_col++; return (Token){TOKEN_AMP, "&", 0, start_line, start_col};
 		// Division or Comment
 		case '/': 
 			if (source_code[src_pos + 1] == '/') {
@@ -221,7 +312,7 @@ Token get_next_token()
 					// Col updates aren't strictly necessary inside comments, but good practice
 					current_col++; 
 				}
-				return get_next_token();	// Recursion to find real token
+				return get_next_token();    // Recursion to find real token
 			}
 			src_pos++; current_col++; 
 			return (Token){TOKEN_SLASH, "/", 0, start_line, start_col};
@@ -263,7 +354,7 @@ Token get_next_token()
 			t.line = start_line;
 			t.column = start_col;
 
-			src_pos++; current_col++;	// Skip opening "
+			src_pos++; current_col++;   // Skip opening "
 			int i = 0;
 			while (source_code[src_pos] != '"' && source_code[src_pos] != '\0') {
 				if (source_code[src_pos] == '\\' && source_code[src_pos+1] == 'n') {
@@ -276,9 +367,62 @@ Token get_next_token()
 			}
 			t.name[i] = '\0';
 			if (source_code[src_pos] == '"') {
-				src_pos++; current_col++;	// Skip closing "
+				src_pos++; current_col++;   // Skip closing "
 			}
 			return t;
+		}
+		case '#': {
+			// Handle #define
+			// We assume #include was handled by the preprocessor pass already.
+			src_pos++; // Skip '#'
+			
+			// Read "define"
+			while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) src_pos++;
+			
+			// Check if it's "define"
+			if (strncmp(&source_code[src_pos], "define", 6) == 0) {
+				src_pos += 6;
+				
+				// Get Macro Name
+				while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) src_pos++;
+				
+				char name[64];
+				int i = 0;
+				while (isalnum(source_code[src_pos]) || source_code[src_pos] == '_') {
+					name[i++] = source_code[src_pos++];
+				}
+				name[i] = '\0';
+				
+				// Get Macro Value (We cheat and use get_next_token recursively!)
+				// This allows us to parse integers, strings, etc.
+				Token value = get_next_token();
+				
+				// FIX: Check for negative numbers (#define NEG -1)
+                // If we see a minus, grab the next token and merge them if it's an int.
+                if (value.type == TOKEN_MINUS) {
+                    Token next = get_next_token();
+                    if (next.type == TOKEN_INT) {
+                        value.type = TOKEN_INT;
+                        value.value = -next.value; // Negate the value
+                    } else {
+                        // If it's not an integer (e.g. #define NEG -x), 
+                        // our simple 1-token macro system can't handle it yet.
+                        error_at((Token){0,"",0,current_line,current_col}, "Macros must be single tokens or negative integers");
+                    }
+                }
+
+				// Store it
+				add_macro(name, value);
+				
+				// Recursively return the NEXT token (skip the define line)
+				return get_next_token();
+			}
+			
+			// If it's NOT define (maybe an include left over?), ignore line
+			 while (source_code[src_pos] != '\0' && source_code[src_pos] != '\n') {
+				src_pos++;
+			}
+			return get_next_token();
 		}
 		default: 
 			error_at((Token){0, "", 0, start_line, start_col}, "Unknown character");
@@ -296,37 +440,39 @@ void advance()
 /* ========================================================================= */
 
 typedef enum {
-	NODE_INT,			// Integer literal
-	NODE_VAR_REF,		// x (usage of a variable)
-	NODE_BINOP,			// Math (+, -, *, /)
-	NODE_ASSIGN,		// x = ...;
-	NODE_VAR_DECL,		// int x = ...;
-	NODE_RETURN,		// return x;
-	NODE_BLOCK,			// { ... }
-	NODE_FUNCTION,		// Function definition
-	NODE_IF,			// if ...
-	NODE_WHILE,			// while ...
-	NODE_GT,			// >
-	NODE_LT,			// <
-	NODE_EQ,			// ==
-	NODE_NEQ,			// !=
-	NODE_SYSCALL,		// syscall()
-	NODE_POST_INC,		// i++
-	NODE_STRING,		// "string"
-	NODE_ARRAY_DECL,	// int x[10];
-	NODE_ARRAY_ACCESS,	// x[i]
-	NODE_FUNC_CALL,		// add(1, 2);
+	NODE_INT,           // Integer literal
+	NODE_VAR_REF,       // x (usage of a variable)
+	NODE_BINOP,         // Math (+, -, *, /)
+	NODE_ASSIGN,        // x = ...;
+	NODE_VAR_DECL,      // int x = ...;
+	NODE_RETURN,        // return x;
+	NODE_BLOCK,         // { ... }
+	NODE_FUNCTION,      // Function definition
+	NODE_IF,            // if ...
+	NODE_WHILE,         // while ...
+	NODE_GT,            // >
+	NODE_LT,            // <
+	NODE_EQ,            // ==
+	NODE_NEQ,           // !=
+	NODE_SYSCALL,       // syscall()
+	NODE_POST_INC,      // i++
+	NODE_STRING,        // "string"
+	NODE_ARRAY_DECL,    // int x[10];
+	NODE_ARRAY_ACCESS,  // x[i]
+	NODE_FUNC_CALL,     // add(1, 2);
+	NODE_ADDR,          // &x (Address of)
+	NODE_DEREF,         // *x (Dereference)
 } NodeType;
 
 typedef struct ASTNode {
 	NodeType type;
-	int int_value;			// For literals
-	char *var_name;			// For references/declarations
-	char op;				// For binary ops
-	struct ASTNode *left;	// Left child
-	struct ASTNode *right;	// Right child
-	struct ASTNode *body;	// For functions
-	struct ASTNode *next;	// For linked lists in blocks
+	int int_value;          // For literals
+	char *var_name;         // For references/declarations
+	char op;                // For binary ops
+	struct ASTNode *left;   // Left child
+	struct ASTNode *right;  // Right child
+	struct ASTNode *body;   // For functions
+	struct ASTNode *next;   // For linked lists in blocks
 } ASTNode;
 
 // Helper to make a new node
@@ -346,6 +492,7 @@ ASTNode *create_node(NodeType type)
 ASTNode *parse_expression();
 ASTNode *parse_block();
 ASTNode *parse_syscall();
+ASTNode *parse_bitwise();
 
 ASTNode *parse_if()
 {
@@ -363,7 +510,7 @@ ASTNode *parse_if()
 		advance();
 		// Support 'else if' by checking if next token is IF
 		if (current_token.type == TOKEN_IF) {
-			else_body = parse_if();	// Recursion for 'else if'
+			else_body = parse_if(); // Recursion for 'else if'
 		} else {
 			else_body = parse_block();
 		}
@@ -378,7 +525,7 @@ ASTNode *parse_if()
 
 ASTNode *parse_while()
 {
-	advance();	// Skip 'while'
+	advance();  // Skip 'while'
 
 	ASTNode *condition = parse_expression();
 	ASTNode *body = parse_block();
@@ -408,7 +555,7 @@ ASTNode *parse_factor()
 
 		// Function Call: add(1, 2)
 		if (current_token.type == TOKEN_LPAREN) {
-			advance();	// consume '('
+			advance();  // consume '('
 
 			ASTNode *call_node = create_node(NODE_FUNC_CALL);
 			call_node->var_name = node->var_name; // Reuse name
@@ -429,25 +576,25 @@ ASTNode *parse_factor()
 				if (current_token.type == TOKEN_COMMA) advance();
 				else if (current_token.type != TOKEN_RPAREN) error("Expected ',' or ')'");
 			}
-			advance();	// consume ')'
+			advance();  // consume ')'
 
-			free(node);	// Free the original var_ref shell
+			free(node); // Free the original var_ref shell
 			return call_node;
 		}
 
 		// Array Access: x[i]
 		if (current_token.type == TOKEN_LBRACKET) {
-			advance();	// consume '['
+			advance();  // consume '['
 			ASTNode *index = parse_expression();
 			if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
-			advance();	// consume ']'
+			advance();  // consume ']'
 
 			// Convert to ARRAY_ACCESS node
 			ASTNode *array_node = create_node(NODE_ARRAY_ACCESS);
 			array_node->var_name = node->var_name;
 			array_node->left = index; 
 
-			free(node);	// Cleanup
+			free(node); // Cleanup
 			return array_node;
 		}
 
@@ -482,7 +629,7 @@ ASTNode *parse_factor()
 	// Handle String Literals
 	if (current_token.type == TOKEN_STRING) {
 		ASTNode *node = create_node(NODE_STRING);
-		node->var_name = strdup(current_token.name);	// Store the string content
+		node->var_name = strdup(current_token.name);    // Store the string content
 		advance();
 		return node;
 	}
@@ -491,16 +638,48 @@ ASTNode *parse_factor()
 	exit(1);
 }
 
+ASTNode *parse_unary()
+{
+	// Address Of (&x)
+	if (current_token.type == TOKEN_AMP) {
+		advance();
+		ASTNode *node = create_node(NODE_ADDR);
+		node->left = parse_unary();         // Recursive to handle &*x
+		return node;
+	}
+
+	// Dereference (*x)
+	if (current_token.type == TOKEN_STAR) {
+		advance();
+		ASTNode *node = create_node(NODE_DEREF);
+		node->left = parse_unary();         // Recursive to handle **x
+		return node;
+	}
+
+	// Negative Numbers (-5)
+	if (current_token.type == TOKEN_MINUS) {
+		advance();
+		ASTNode *node = create_node(NODE_BINOP);
+		node->op = '-';
+		node->left = create_node(NODE_INT); // Implicit 0 - x
+		node->left->int_value = 0;
+		node->right = parse_unary();
+		return node;
+	}
+
+	return parse_factor();
+}
+
 // Term: handles * and /
 ASTNode *parse_term()
 {
-	ASTNode *node = parse_factor();
+	ASTNode *node = parse_unary();
 	while (current_token.type == TOKEN_STAR || current_token.type == TOKEN_SLASH) {
 		ASTNode *newNode = create_node(NODE_BINOP);
 		newNode->op = (current_token.type == TOKEN_STAR) ? '*' : '/';
 		newNode->left = node;
 		advance();
-		newNode->right = parse_factor();
+		newNode->right = parse_unary();
 		node = newNode;
 	}
 	return node;
@@ -521,9 +700,32 @@ ASTNode *parse_math()
 	return node;
 }
 
+ASTNode *parse_bitwise() {
+	// Parse the left side (Math: +, -)
+	ASTNode *node = parse_math();
+
+	// Look for & or |
+	while (current_token.type == TOKEN_AMP || current_token.type == TOKEN_PIPE) {
+		char op = (current_token.type == TOKEN_AMP) ? '&' : '|';
+
+		// We reuse NODE_BINOP for convenience
+		ASTNode *newNode = create_node(NODE_BINOP);
+		newNode->op = op;
+		newNode->left = node;
+
+		advance();
+
+		// 3. Parse the right side
+		newNode->right = parse_math();
+
+		node = newNode;
+	}
+	return node;
+}
+
 ASTNode *parse_comparison()
 {
-	ASTNode *node = parse_math();
+	ASTNode *node = parse_bitwise();
 
 	// While current token is <, >, ==, !=
 	while (current_token.type == TOKEN_GT || current_token.type == TOKEN_LT || 
@@ -538,7 +740,7 @@ ASTNode *parse_comparison()
 		ASTNode *newNode = create_node(type);
 		newNode->left = node;
 		advance();
-		newNode->right = parse_math();
+		newNode->right = parse_bitwise();
 		node = newNode;
 	}
 	return node;
@@ -552,13 +754,19 @@ ASTNode *parse_expression()
 	if (current_token.type == TOKEN_ASSIGN) {
 		advance(); // consume '='
 
-		if (lhs->type != NODE_VAR_REF && lhs->type != NODE_ARRAY_ACCESS)
-			error("Syntax Error: Invalid l-value. Can only assign to variables or arrays.");
+		// Check valid L-value: Var, Array, or DEREF
+		if (lhs->type != NODE_VAR_REF && lhs->type != NODE_ARRAY_ACCESS && lhs->type != NODE_DEREF)
+			error("Syntax Error: Invalid l-value.");
 
 		ASTNode *assign = create_node(NODE_ASSIGN);
 
-		// Handle Array Assignment specifically
-		if (lhs->type == NODE_ARRAY_ACCESS) {
+		// Handle Pointer Assignment (*ptr = val)
+		if (lhs->type == NODE_DEREF) {
+			assign->left = lhs;
+			// DEREF nodes don't have names, but we might need a dummy one to avoid segfaults 
+			// if other code checks var_name. Ideally we check type first.
+			assign->var_name = NULL;
+		} else if (lhs->type == NODE_ARRAY_ACCESS) {
 			assign->left = lhs; 
 			// FIX: Use strdup to create a COPY of the string.
 			// Now both nodes own their own string memory.
@@ -580,7 +788,7 @@ ASTNode *parse_expression()
 // Note: We check specifically for 'int', 'char', or 'ptr' types here
 ASTNode *parse_var_declaration()
 {
-	advance();	// Consume 'int'
+	advance();  // Consume 'int'
 
 	if (current_token.type != TOKEN_IDENTIFIER) error("Expected variable name");
 	char *name = strdup(current_token.name);
@@ -588,17 +796,17 @@ ASTNode *parse_var_declaration()
 
 	// Check for Array Declaration: int x[10];
 	if (current_token.type == TOKEN_LBRACKET) {
-		advance();	// consume '['
+		advance();  // consume '['
 
 		if (current_token.type != TOKEN_INT) error("Array size must be an integer literal");
 		int size = current_token.value;
-		advance();	// consume size
+		advance();  // consume size
 
 		if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
-		advance();	// consume ']'
+		advance();  // consume ']'
 
 		if (current_token.type != TOKEN_SEMI) error("Expected ';'");
-		advance();	// consume ';'
+		advance();  // consume ';'
 
 		ASTNode *node = create_node(NODE_ARRAY_DECL);
 		node->var_name = name;
@@ -634,9 +842,9 @@ ASTNode *parse_statement()
 		return node;
 	}
 
-	// Variable Declaration (int x = ...)
-	if (current_token.type == TOKEN_INT_TYPE) {
-		return parse_var_declaration();
+	// Variable Declaration (int x... OR ptr x...)
+	if (current_token.type == TOKEN_INT_TYPE || current_token.type == TOKEN_PTR_TYPE) {
+		return parse_var_declaration(); 
 	}
 
 	if (current_token.type == TOKEN_IF) return parse_if();
@@ -658,7 +866,7 @@ ASTNode *parse_block()
 	if (current_token.type != TOKEN_LBRACE)
 		error("Syntax Error: Expected '{' at start of block");
 
-	advance();	// Consume '{'
+	advance();  // Consume '{'
 
 	ASTNode *block = create_node(NODE_BLOCK);
 	ASTNode *curr = NULL;
@@ -667,10 +875,10 @@ ASTNode *parse_block()
 	while (current_token.type != TOKEN_RBRACE && current_token.type != TOKEN_EOF) {
 		ASTNode *stmt = parse_statement();
 		if (!block->left) {
-			block->left = stmt;	// Head of list
+			block->left = stmt; // Head of list
 			curr = stmt;
 		} else {
-			curr->next = stmt;	// Append to list
+			curr->next = stmt;  // Append to list
 			curr = stmt;
 		}
 	}
@@ -678,20 +886,20 @@ ASTNode *parse_block()
 	if (current_token.type != TOKEN_RBRACE) {
 		error("Error: Expected '}'");
 	}
-	advance();	// Consume '}'
+	advance();  // Consume '}'
 	return block;
 }
 
 ASTNode *parse_function()
 {
 	if (current_token.type != TOKEN_FN) return NULL;
-	advance();	// consume 'fn'
+	advance();  // consume 'fn'
 
 	char *name = strdup(current_token.name);
-	advance();	// consume name
+	advance();  // consume name
 
 	if (current_token.type != TOKEN_LPAREN) error("Expected '('");
-	advance();	// consume '('
+	advance();  // consume '('
 
 	// Parse Parameters (a: int, b: int)
 	ASTNode *first_param = NULL;
@@ -710,8 +918,9 @@ ASTNode *parse_function()
 		if (current_token.type != TOKEN_COLON) error("Expected ':' after parameter name");
 		advance();
 
-		// Expect Type (For now, only 'int' is allowed)
-		if (current_token.type != TOKEN_INT_TYPE) error("Expected parameter type 'int'");
+		// Expect Type (int OR ptr)
+		if (current_token.type != TOKEN_INT_TYPE && current_token.type != TOKEN_PTR_TYPE)
+			error("Expected parameter type 'int' or 'ptr'");
 		advance();
 
 		// Link the parameter node
@@ -735,7 +944,8 @@ ASTNode *parse_function()
 	// Parse Return Type (-> int)
 	if (current_token.type == TOKEN_ARROW) {
 		advance(); // consume '->'
-		if (current_token.type != TOKEN_INT_TYPE) error("Expected return type 'int'");
+		if (current_token.type != TOKEN_INT_TYPE && current_token.type != TOKEN_PTR_TYPE)
+			error("Expected return type 'int' or 'ptr'");
 		advance(); // consume 'int'
 	}
 
@@ -749,12 +959,12 @@ ASTNode *parse_function()
 
 ASTNode *parse_syscall()
 {
-	advance();	// Skip 'syscall'
+	advance();  // Skip 'syscall'
 
 	if (current_token.type != TOKEN_LPAREN)
 		error("Error: Expected '(' after syscall");
 
-	advance();	// Skip '('
+	advance();  // Skip '('
 
 	ASTNode *call_node = create_node(NODE_SYSCALL);
 	ASTNode *current_arg = NULL;
@@ -764,15 +974,15 @@ ASTNode *parse_syscall()
 		ASTNode *expr = parse_expression();
 
 		if (call_node->left == NULL) {
-			call_node->left = expr;		// First arg
+			call_node->left = expr;     // First arg
 			current_arg = expr;
 		} else {
-			current_arg->next = expr;	// Chain subsequent args
+			current_arg->next = expr;   // Chain subsequent args
 			current_arg = expr;
 		}
 
 		if (current_token.type == TOKEN_COMMA) {
-			advance();	// Skip ','
+			advance();  // Skip ','
 		} else if (current_token.type != TOKEN_RPAREN) {
 			error("Error: Expected ',' or ')'");
 		}
@@ -817,7 +1027,7 @@ typedef struct {
 	int offset; // e.g., -8, -16
 } Symbol;
 
-Symbol symbols[100];	// Fixed size for simplicity
+Symbol symbols[100];    // Fixed size for simplicity
 int symbol_count = 0;
 int current_stack_offset = 0;
 
@@ -834,7 +1044,7 @@ int get_offset(char *name)
 
 void add_symbol(char *name)
 {
-	current_stack_offset -= 8;	// Grow stack down by 8 bytes (64-bit)
+	current_stack_offset -= 8;  // Grow stack down by 8 bytes (64-bit)
 	strcpy(symbols[symbol_count].name, name);
 	symbols[symbol_count].offset = current_stack_offset;
 	symbol_count++;
@@ -865,28 +1075,75 @@ void gen_asm(ASTNode *node) {
 			printf("  pop rax\n");
 			printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
 			break;
+		case NODE_ADDR: {
+			// &x
+			// We need the address of the variable, not its value.
+			// This is equivalent to `lea rax, [rbp - offset]`
+			
+			// Note: & only works on variables/arrays, not literals like &(5)
+			if (node->left->type != NODE_VAR_REF && node->left->type != NODE_ARRAY_ACCESS) {
+				printf("; Error: Can only take address of variable\n");
+				exit(1);
+			}
+			
+			int offset = get_offset(node->left->var_name);
+			printf("  lea rax, [rbp + %d]\n", offset);
+			
+			// If it's an array access (&arr[i]), we need to add the index
+			if (node->left->type == NODE_ARRAY_ACCESS) {
+			   // This is tricky because we need to evaluate the index first.
+			   // For simplicity, let's just support basic variable addresses for now.
+			}
+
+			printf("  push rax\n");
+			break;
+		}
+
+		case NODE_DEREF:
+			// *ptr
+			gen_asm(node->left); // Evaluate the pointer (puts address in rax)
+			
+			printf("  pop rax\n");         // Get Address
+			printf("  mov rax, [rax]\n");  // Load value AT that address
+			printf("  push rax\n");
+			break;
 
 		case NODE_ASSIGN:
-			// Check for ARRAY or VARIABLE assignment
-			if (node->left && node->left->type == NODE_ARRAY_ACCESS) {
-				// ARRAY WRITE: x[i] = val
+			// POINTER ASSIGNMENT (*ptr = val)
+			// We check this FIRST because var_name is NULL here.
+			if (node->left && node->left->type == NODE_DEREF) {
+				gen_asm(node->right);       // Generate Value (pushes to stack)
+				gen_asm(node->left->left);  // Generate Pointer Address (pushes to stack)
+				
+				printf("  pop rax\n");      // Address
+				printf("  pop rbx\n");      // Value
+				printf("  mov [rax], rbx\n"); // Write Value to Address
+			}
+			// ARRAY ASSIGNMENT (x[i] = val)
+			else if (node->left && node->left->type == NODE_ARRAY_ACCESS) {
 				gen_asm(node->right);      // Push Value
 				gen_asm(node->left->left); // Push Index
-
-				int offset = get_offset(node->var_name);
+				
+				int offset = get_offset(node->var_name); // var_name is valid ("x")
 				printf("  pop rbx\n");        // Index
 				printf("  pop rax\n");        // Value
-
+				
 				// Calc Address: rbp + offset + (index * 8)
 				printf("  mov rcx, %d\n", offset);
 				printf("  imul rbx, 8\n");
 				printf("  add rcx, rbx\n");
 				printf("  add rcx, rbp\n");
-
+				
 				printf("  mov [rcx], rax\n"); // Store
 			} 
+			// STANDARD VARIABLE ASSIGNMENT (x = val)
 			else {
-				// STANDARD VARIABLE
+				// Safety check
+				if (node->var_name == NULL) {
+					 fprintf(stderr, "Compiler Error: Assignment with NULL variable name\n");
+					 exit(1);
+				}
+
 				gen_asm(node->right);
 				printf("  pop rax\n");
 				printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
@@ -915,6 +1172,8 @@ void gen_asm(ASTNode *node) {
 				printf("  cqo\n");     // Sign extend rax to rdx:rax (NASM equivalent of cqto)
 				printf("  idiv rbx\n");
 			}
+			if (node->op == '&') printf("  and rax, rbx\n");
+			if (node->op == '|') printf("  or rax, rbx\n");
 
 			printf("  push rax\n");
 			break;
@@ -928,22 +1187,22 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_FUNCTION:
-            // Reset symbol table
-            symbol_count = 0;
-            current_stack_offset = 0;
+			// Reset symbol table
+			symbol_count = 0;
+			current_stack_offset = 0;
 
-            // CHECK FOR MAIN -> _start
-            if (strcmp(node->var_name, "main") == 0) {
-                printf("global _start\n");
-                printf("_start:\n");
-            } else {
-                printf("global %s\n", node->var_name);
-                printf("%s:\n", node->var_name);
-            }
+			// CHECK FOR MAIN -> _start
+			if (strcmp(node->var_name, "main") == 0) {
+				printf("global _start\n");
+				printf("_start:\n");
+			} else {
+				printf("global %s\n", node->var_name);
+				printf("%s:\n", node->var_name);
+			}
 
-            printf("  push rbp\n");
-            printf("  mov rbp, rsp\n");
-            printf("  sub rsp, 256\n"); // Reserve stack space
+			printf("  push rbp\n");
+			printf("  mov rbp, rsp\n");
+			printf("  sub rsp, 256\n"); // Reserve stack space
 
 			// Handle Parameters (Move registers to stack)
 			ASTNode *param = node->left;
@@ -1161,7 +1420,7 @@ int main(int argc, char **argv)
 	}
 
 	// Read Input
-	source_code = read_file(input_filename);
+	source_code = preprocess_file(input_filename);
 
 	// Prime the lexer
 	advance(); 

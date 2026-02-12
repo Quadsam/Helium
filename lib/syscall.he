@@ -1,0 +1,22 @@
+#define SYS_read  0
+#define SYS_write 1
+#define SYS_exit  60
+
+// Read from fd
+fn read(fd: int, buf: ptr, count: int) -> int
+{
+	return syscall(SYS_read, fd, buf, count);
+}
+
+// Write syscall alias
+fn write(fd: int, str: ptr, count: int) -> int
+{
+	return syscall(SYS_write, fd, str, count);
+}
+
+// Exit the program
+fn exit(code: int) -> int
+{
+	syscall(SYS_exit, code);
+	return 0;
+}

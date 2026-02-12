@@ -1,0 +1,49 @@
+fn main()
+{
+	// Create a buffer for the number string (20 bytes is enough for 64-bit int)
+	int buffer[20];
+	int n = 123456789;
+	int i = 18; // Start filling from the end
+
+	// Add a newline at the end
+	buffer[19] = 10; // ASCII for \n
+
+	// Conversion Loop
+	while n > 0 {
+		int rem = n;
+		// Manual Modulo: n % 10
+		int div = n / 10;
+		rem = rem - (div * 10);
+		
+		// Convert int (0-9) to ASCII ('0'-'9')
+		// ASCII '0' is 48
+		buffer[i] = rem + 48;
+		
+		n = n / 10;
+		i = i - 1;
+	}
+
+	// Since we filled backwards, the string starts at index i + 1
+	// Calculate length: 20 - (i + 1)
+	int start_index = i + 1;
+	int length = 20 - start_index;
+
+	// We need the ADDRESS of the buffer start.
+	// In C this is &buffer[start_index].
+	// In Helium, we don't have the & operator yet!
+	// BUT... arrays decay to pointers. 
+	// This part is tricky without an address-of operator.
+	// Let's cheat: Print the WHOLE buffer, but pad the start with spaces (32).
+	
+	int j = 0;
+	while j <= i {
+		buffer[j] = 32; // Space
+		j++;
+	}
+
+	// Syscall write(1, buffer, 20)
+	// Note: buffer refers to the start of the array in memory
+	syscall(1, 1, buffer, 20);
+
+	syscall(60, 0);
+}

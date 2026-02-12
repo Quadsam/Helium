@@ -1,0 +1,73 @@
+// ==========================================
+// HELIUM STANDARD LIBRARY
+// ==========================================
+
+#include "lib/syscall.he"
+
+#define EXIT_FAILURE -1
+#define EXIT_SUCCESS 0
+
+// Calculate the length of a null-terminated string
+fn strlen(str: ptr) -> int
+{
+	int len = 0;
+	ptr cursor = str;
+	while (*cursor & 255) != 0 {
+		len++;
+		cursor++;
+	}
+	return len;
+}
+
+// Write a string to stdout
+fn print(str: ptr) -> int
+{
+	int len = strlen(str);
+	write(1, str, len);
+	return 0;
+}
+
+// Print a single character
+fn print_char(c: int) -> int
+{
+	write(1, &c, 1);
+	return 0;
+}
+
+// Print an integer (The hard part!)
+// Algorithm: Recursion is easiest to print "123" in order.
+fn print_int(n: int) -> int
+{
+	if n == 0 {
+		print_char(48); // '0'
+		return 0;
+	}
+
+	// Handle negative numbers
+	if n < 0 {
+		print_char(45); // '-'
+		n = 0 - n;      // Make positive
+	}
+
+	// Helper to print digits recursively
+	print_int_recursive(n);
+	return 0;
+}
+
+fn print_int_recursive(n: int) -> int
+{
+	if n == 0 {
+		return 0;
+	}
+
+	int div = n / 10;
+	int rem = n - (div * 10);
+
+	// Recurse first (so we print 1, then 2, then 3)
+	print_int_recursive(div);
+
+	// Print this digit (48 is ASCII '0')
+	print_char(rem + 48);
+	return 0;
+}
+

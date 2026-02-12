@@ -1,0 +1,22 @@
+fn main()
+{
+	// Syscall 2 = OPEN
+	// Flags: 65 (O_WRONLY | O_CREAT)
+	// Mode: 420 (0644 - rw-r--r--)
+	int fd = syscall(2, "helium_test.txt", 65, 420);
+
+	if fd > 0 {
+		// Syscall 1 = WRITE
+		syscall(1, fd, "Helium compiled this!\n", 22);
+		
+		// Syscall 3 = CLOSE
+		syscall(3, fd);
+		
+		// Print success message to stdout
+		syscall(1, 1, "File created successfully.\n", 27);
+	} else {
+		syscall(1, 1, "Failed to open file.\n", 21);
+	}
+
+	syscall(60, 0);
+}

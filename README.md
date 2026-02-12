@@ -1,94 +1,172 @@
-# Helium
+# Helium Compiler 🎈
 
-A compiler and language built by Quadsam
+**Helium** is a lightweight, C-like systems programming language that compiles directly to **x86_64 Assembly (NASM)**.
 
-## Usage
+It is designed to be simple, transparent, and capable of generating bare-metal Linux executables without relying on `libc` or complex runtimes. The compiler itself is written in C and is self-hosting capable.
 
-1. Build the compiler:
+## ✨ Features
+
+* **Native Compilation:** Generates clean, readable x86_64 assembly (Intel syntax).
+* **Zero Dependencies:** Output binaries are linked with `ld` and use raw Linux syscalls.
+* **Types:** Strong support for 64-bit integers (`int`) and pointers (`ptr`).
+* **Memory Management:** Stack-based variables, arrays (`int arr[10]`), and pointer arithmetic (`*ptr`, `&val`).
+* **Preprocessor:** Supports `#include` for file modularity and `#define` for constants.
+* **Control Flow:** `if`, `else`, `while` loops.
+* **Standard Library:** Includes a custom `std.he` for string manipulation, I/O, and math.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
+
+You need **GCC** (to build the compiler), **NASM** (to assemble the output), and **LD** (to link the binary).
 
 ```bash
-make
+sudo apt install build-essential nasm
 ```
 
-2. Run the compiler on Helium source (`.he`):
+### 2. Build the Compiler
+
+Clone the repository and build the `helium` executable:
 
 ```bash
-./bin/heliumc -o output.s examples/helloworld.he
-nasm -felf64 -o output.o output.s
-ld -o output output.o
+gcc compiler.c -o helium
 ```
 
-3. Run the executable:
+### 3. Compile "Hello World"
 
-```bash
-./output
-```
+Create a file named `main.he`:
 
-
-
-## TODO:
-
-1. Dealing with ~~syscall and~~ asm
-	- [x] syscall: Map this directly to the x86 syscall instruction. Ensure arguments are moved into the correct registers (rdi, rsi, rdx, r10, r8, r9) before the instruction is emitted.
-	- [ ] asm: Treat the asm block as a raw string and literally print it into the `.s` output file during code generation.
-
-
-## Code Syntax
-
-1. Variable Declarations
-
-Variable declarations should be C-style (`type name = value;`)
-
-```C
-int x = 10;
-```
-
-2. Control Flow & Braces
-
-```C
-fn main()
-{
-	int i = 0;
-	while i < 10 {
-		i++;
-	}
-}
-```
-
-We don't require parentheses for `if`, `for`, and `while`.
-
-We use `else if`
-
-3. Function Definitions
-
-Definitions should look like this: `fn add(a: int, b: int) -> int { ... }`
-
-4. **Type System**: For the V1 compiler, types are limited to what can fit directly on x86-64 registers:
-	- `int`  (64-bit integer, maps to `rax`)
-	- `char` (8-bit unsigned, for chars/strings)
-	- `ptr`  (generic pointer)
-
-5. Misc Features
-	1. **Direct Assembly inlining**: Drop `asm` blocks directly into the code
-	2. **No header files**: Just include files directly: `import "file.he"`
-	3. **Built in `syscall`**: A keyword to trigger Linux syscalls without `libc`
-
-### Example code
-
-```C
-import "std/io"
+```c
+#include "std.he"
 
 fn main()
 {
-	int count = 10;
-	int result = 0;
-
-	while count > 0 {
-		result = result + count;
-		count = count - 1;
-	}
-
-	return result;
+    print("Hello from Helium!\n");
+    exit(0);
 }
 ```
 
+Compile and run it:
+
+```bash
+# 1. Compile to Assembly
+./helium -o main.s main.he
+
+# 2. Assemble to Object File
+nasm -f elf64 main.s -o main.o
+
+# 3. Link to Executable
+ld main.o -o main
+
+# 4. Run
+./main
+```
+
+---
+
+## 📖 Language Reference
+
+### Variables & Types
+
+Helium supports 64-bit signed integers and pointers.
+
+```c
+int x = 42;          // Variable definition
+ptr str = "Hello";   // Pointer to string literal
+int arr[10];         // Array of 10 integers (80 bytes)
+
+x = x + 1;           // Assignment
+arr[0] = 5;          // Array access
+
+```
+
+### Pointers
+
+You can take the address of variables and dereference pointers.
+
+```c
+int a = 10;
+int p = &a;  // p now holds the address of a
+*p = 20;     // a is now 20
+
+```
+
+### Functions
+
+Functions are defined with the `fn` keyword. They support parameters and return types.
+
+```c
+fn add(a: int, b: int) -> int
+{
+    return a + b;
+}
+
+fn main()
+{
+    int sum = add(10, 20);
+    exit(sum);
+}
+
+```
+
+### Control Flow
+
+Standard C-style control structures.
+
+```c
+if x > 10 {
+    print("Greater");
+} else {
+    print("Smaller");
+}
+
+while i < 10 {
+    i++;
+}
+
+```
+
+### System Calls
+
+You can invoke Linux syscalls directly.
+
+```c
+// syscall(number, arg1, arg2, arg3...)
+syscall(1, 1, "Raw Write\n", 10); // Syscall 1 = WRITE
+syscall(60, 0);                   // Syscall 60 = EXIT
+
+```
+
+---
+
+## 📚 Standard Library (`std.he`)
+
+The compiler comes with a lightweight standard library that wraps common syscalls.
+
+| Function | Description |
+| --- | --- |
+| `print(str: ptr)` | Prints a string to stdout. |
+| `print_int(n: int)` | Prints a signed integer. |
+| `strlen(str: ptr)` | Returns the length of a string. |
+| `read(fd: int, buf: ptr, count: int)` | Exits the program with the given status code. |
+| `write(fd: int, str: ptr, count: int)` | Exits the program with the given status code. |
+| `exit(code: int)` | Exits the program with the given status code. |
+
+---
+
+## 🛠️ Architecture
+
+The compiler follows a traditional single-pass design:
+
+1. **Lexer:** Tokenizes source code into a stream of tokens (Identifiers, Keywords, Symbols).
+2. **Preprocessor:** Handles `#include` recursion and `#define` macro substitution.
+3. **Parser:** Constructs an Abstract Syntax Tree (AST) from the token stream.
+4. **Code Generator:** Traverses the AST and emits x86_64 NASM assembly instructions.
+
+---
+
+## 📝 License
+
+This project is open source. Feel free to use, modify, and distribute it as you see fit.
