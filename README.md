@@ -156,6 +156,19 @@ The compiler comes with a lightweight standard library that wraps common syscall
 
 ---
 
+## TODO
+
+1. **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
+
+2. **`struct` Support:** The biggest missing piece for complex programs. This would involve calculating offsets for members (e.g., user.id, user.name) similar to how stack variables are handled.
+
+3. **`char` Type (1-byte support):** Right now, ptr math assumes everything is 1 byte, but variables are 8 bytes. Adding a distinct char type would make string manipulation significantly safer and easier than manually masking & 255.
+
+4. **Command Line Arguments:** Impliment `argv` and `argc`
+
+---
+
+
 ## 🛠️ Architecture
 
 The compiler follows a traditional single-pass design:
