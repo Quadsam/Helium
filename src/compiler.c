@@ -14,6 +14,8 @@ typedef enum {
 	TOKEN_FN,           // fn
 	TOKEN_INT_TYPE,     // int
 	TOKEN_PTR_TYPE,     // ptr
+	TOKEN_CHAR_TYPE,	// char
+	TOKEN_CHAR,			// 'a'
 	TOKEN_RETURN,       // return
 	TOKEN_LPAREN,       // (
 	TOKEN_RPAREN,       // )
@@ -58,8 +60,12 @@ Token current_token;
 /* GLOBAL STATE                                                              */
 /* ========================================================================= */
 
+#define MAX_STACK_SIZE 4096
+
 char *source_code;
-char *current_filename = "unknown"; // Default
+char *current_filename  = "unknown"; // Default
+int filename_allocated = 0;
+char *current_func_name = "unknown"; // Default
 int src_pos = 0;
 int current_line = 1;
 int current_col = 1;
@@ -168,37 +174,46 @@ char *preprocess_file(const char *filename)
 	int length = 0;
 	int capacity = 0;
 
+	// 1. Emit Initial Marker (#file "filename" 1)
+	// This tells the lexer "We are starting this file at line 1"
+	char marker[512];
+	snprintf(marker, sizeof(marker), "#file \"%s\" 1\n", filename);
+	append_string(&buffer, &length, &capacity, marker);
+
 	char line[1024];
+	int file_line_number = 1; // Track line numbers in THIS file
+
 	while (fgets(line, sizeof(line), f)) {
-		// Check for #include "filename"
-		// We look for: #, then include, then quote
+		file_line_number++; // We are about to process this line
+		
+		// Check for #include
 		char *include_ptr = strstr(line, "#include");
 		
 		if (include_ptr) {
-			// Found an include! Extract filename.
 			char *start_quote = strchr(line, '"');
 			char *end_quote = strrchr(line, '"');
 			
 			if (start_quote && end_quote && end_quote > start_quote) {
-				// Terminate the string at the end quote
 				*end_quote = '\0';
 				char *included_filename = start_quote + 1;
 				
 				// Recursively read the included file
+				// (The child call will emit its own "start marker")
 				char *included_content = preprocess_file(included_filename);
 				
-				// Append the content instead of the #include line
 				append_string(&buffer, &length, &capacity, included_content);
 				
-				// Append a newline to be safe
-				append_string(&buffer, &length, &capacity, "\n");
+				// 2. Emit Restore Marker
+				// We just came back from an include. We must tell the lexer:
+				// "We are back in 'filename' at 'file_line_number'"
+				snprintf(marker, sizeof(marker), "\n#file \"%s\" %d\n", filename, file_line_number);
+				append_string(&buffer, &length, &capacity, marker);
 				
 				free(included_content);
-				continue;	// Skip appending the original #include line
+				continue; 
 			}
 		}
 
-		// Normal line, just append it
 		append_string(&buffer, &length, &capacity, line);
 	}
 
@@ -249,6 +264,7 @@ Token get_next_token()
 		if (strcmp(t.name, "fn")            == 0) t.type = TOKEN_FN;
 		else if (strcmp(t.name, "int")      == 0) t.type = TOKEN_INT_TYPE;
 		else if (strcmp(t.name, "ptr")      == 0) t.type = TOKEN_PTR_TYPE;
+		else if (strcmp(t.name, "char")     == 0) t.type = TOKEN_CHAR_TYPE;
 		else if (strcmp(t.name, "return")   == 0) t.type = TOKEN_RETURN;
 		else if (strcmp(t.name, "if")       == 0) t.type = TOKEN_IF;
 		else if (strcmp(t.name, "else")     == 0) t.type = TOKEN_ELSE;
@@ -372,58 +388,127 @@ Token get_next_token()
 			return t;
 		}
 		case '#': {
-			// Handle #define
-			// We assume #include was handled by the preprocessor pass already.
 			src_pos++; // Skip '#'
 			
-			// Read "define"
-			while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) src_pos++;
-			
-			// Check if it's "define"
-			if (strncmp(&source_code[src_pos], "define", 6) == 0) {
-				src_pos += 6;
-				
-				// Get Macro Name
-				while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) src_pos++;
-				
-				char name[64];
-				int i = 0;
-				while (isalnum(source_code[src_pos]) || source_code[src_pos] == '_') {
-					name[i++] = source_code[src_pos++];
-				}
-				name[i] = '\0';
-				
-				// Get Macro Value (We cheat and use get_next_token recursively!)
-				// This allows us to parse integers, strings, etc.
-				Token value = get_next_token();
-				
-				// FIX: Check for negative numbers (#define NEG -1)
-                // If we see a minus, grab the next token and merge them if it's an int.
-                if (value.type == TOKEN_MINUS) {
-                    Token next = get_next_token();
-                    if (next.type == TOKEN_INT) {
-                        value.type = TOKEN_INT;
-                        value.value = -next.value; // Negate the value
-                    } else {
-                        // If it's not an integer (e.g. #define NEG -x), 
-                        // our simple 1-token macro system can't handle it yet.
-                        error_at((Token){0,"",0,current_line,current_col}, "Macros must be single tokens or negative integers");
-                    }
-                }
+			// Skip whitespace
+			while (source_code[src_pos] != '\0' && isspace(source_code[src_pos]) && source_code[src_pos] != '\n') {
+				 src_pos++;
+			}
 
-				// Store it
-				add_macro(name, value);
+			// #file "name" line
+			if (strncmp(&source_code[src_pos], "file", 4) == 0) {
+				src_pos += 4;	// Skip "file"
 				
-				// Recursively return the NEXT token (skip the define line)
-				return get_next_token();
+				// Parse Filename
+				while (source_code[src_pos] != '"' && source_code[src_pos] != '\n') src_pos++;
+				if (source_code[src_pos] == '"') {
+					src_pos++;	// Skip opening "
+					
+					char new_name[256];
+					int i = 0;
+					while (source_code[src_pos] != '"' && i < 255) {
+						new_name[i++] = source_code[src_pos++];
+					}
+					new_name[i] = '\0';
+					src_pos++;	// Skip closing "
+
+					if (filename_allocated) free(current_filename);
+					
+					// Update Global State
+					// (Note: In a real compiler we'd manage memory better, but strdup is fine for V1)
+					current_filename = strdup(new_name);
+					filename_allocated = 1;
+				}
+
+				// Parse Line Number
+				while (!isdigit(source_code[src_pos]) && source_code[src_pos] != '\n') src_pos++;
+				if (isdigit(source_code[src_pos])) {
+					int num = 0;
+					while (isdigit(source_code[src_pos])) {
+						num = num * 10 + (source_code[src_pos++] - '0');
+					}
+					// Update Global State
+					// Subtract 1 because the very next newline will increment it to the correct number
+					current_line = num - 1; 
+				}
+				
+				// Skip the rest of the line
+				while (source_code[src_pos] != '\n' && source_code[src_pos] != '\0') src_pos++;
+				
+				return get_next_token(); // Recurse to get the next real token
+			}
+
+			// CHECK 2: #define ... (Existing logic)
+			if (strncmp(&source_code[src_pos], "define", 6) == 0) {
+				 src_pos += 6;
+				 
+				 // Get Macro Name
+				 while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) src_pos++;
+				 
+				 char name[64];
+				 int i = 0;
+				 while (isalnum(source_code[src_pos]) || source_code[src_pos] == '_') {
+					 name[i++] = source_code[src_pos++];
+				 }
+				 name[i] = '\0';
+				 
+				 Token value = get_next_token();
+				 
+				 // NEGATIVE NUMBER FIX
+				 if (value.type == TOKEN_MINUS) {
+					Token next = get_next_token();
+					if (next.type == TOKEN_INT) {
+						value.type = TOKEN_INT;
+						value.value = -next.value; 
+					} else {
+						error("Macros must be single tokens or negative integers");
+					}
+				}
+
+				 add_macro(name, value);
+				 return get_next_token();
 			}
 			
-			// If it's NOT define (maybe an include left over?), ignore line
-			 while (source_code[src_pos] != '\0' && source_code[src_pos] != '\n') {
-				src_pos++;
-			}
+			// Unknown directive? Ignore line
+			while (source_code[src_pos] != '\0' && source_code[src_pos] != '\n') src_pos++;
 			return get_next_token();
 		}
+
+		case '\'': { // Handle 'c'
+			Token t;
+			t.type = TOKEN_CHAR;
+			t.line = start_line;
+			t.column = start_col;
+
+			src_pos++; current_col++; // Skip opening '
+
+			if (source_code[src_pos] == '\'') {
+				error_at(t, "Empty character literal");
+			}
+
+			// Handle Escape Sequences
+			if (source_code[src_pos] == '\\') {
+				src_pos++; current_col++;
+				char escape = source_code[src_pos];
+				if (escape == 'n') t.value = 10;       // \n
+				else if (escape == 't') t.value = 9;   // \t
+				else if (escape == '0') t.value = 0;   // \0
+				else if (escape == '\\') t.value = 92; // Backslash
+				else if (escape == '\'') t.value = 39; // \'
+				else error_at(t, "Unknown escape sequence");
+			} else {
+				t.value = (int)source_code[src_pos];
+			}
+			src_pos++; current_col++;
+
+			if (source_code[src_pos] != '\'') {
+				error_at(t, "Expected closing '");
+			}
+			src_pos++; current_col++; // Skip closing '
+
+			return t;
+		}
+
 		default: 
 			error_at((Token){0, "", 0, start_line, start_col}, "Unknown character");
 			exit(1);
@@ -542,6 +627,14 @@ ASTNode *parse_factor()
 	// Handle Integers
 	if (current_token.type == TOKEN_INT) {
 		ASTNode *node = create_node(NODE_INT);
+		node->int_value = current_token.value;
+		advance();
+		return node;
+	}
+
+	// Handle Characters ('a')
+	if (current_token.type == TOKEN_CHAR) {
+		ASTNode *node = create_node(NODE_INT); // We treat chars as ints internally
 		node->int_value = current_token.value;
 		advance();
 		return node;
@@ -788,7 +881,12 @@ ASTNode *parse_expression()
 // Note: We check specifically for 'int', 'char', or 'ptr' types here
 ASTNode *parse_var_declaration()
 {
-	advance();  // Consume 'int'
+	if (current_token.type != TOKEN_INT_TYPE &&
+		current_token.type != TOKEN_PTR_TYPE &&
+		current_token.type != TOKEN_CHAR_TYPE) {
+		error("Expected type specifier");
+	}
+	advance();	// Consume type (int/ptr/char)
 
 	if (current_token.type != TOKEN_IDENTIFIER) error("Expected variable name");
 	char *name = strdup(current_token.name);
@@ -843,7 +941,9 @@ ASTNode *parse_statement()
 	}
 
 	// Variable Declaration (int x... OR ptr x...)
-	if (current_token.type == TOKEN_INT_TYPE || current_token.type == TOKEN_PTR_TYPE) {
+	if (current_token.type == TOKEN_INT_TYPE ||
+		current_token.type == TOKEN_PTR_TYPE ||
+		current_token.type == TOKEN_CHAR_TYPE) {
 		return parse_var_declaration(); 
 	}
 
@@ -918,9 +1018,12 @@ ASTNode *parse_function()
 		if (current_token.type != TOKEN_COLON) error("Expected ':' after parameter name");
 		advance();
 
-		// Expect Type (int OR ptr)
-		if (current_token.type != TOKEN_INT_TYPE && current_token.type != TOKEN_PTR_TYPE)
+		// Expect Type (int OR ptr OR char)
+		if (current_token.type != TOKEN_INT_TYPE &&
+			current_token.type != TOKEN_PTR_TYPE &&
+			current_token.type != TOKEN_CHAR_TYPE) {
 			error("Expected parameter type 'int' or 'ptr'");
+		}
 		advance();
 
 		// Link the parameter node
@@ -944,8 +1047,11 @@ ASTNode *parse_function()
 	// Parse Return Type (-> int)
 	if (current_token.type == TOKEN_ARROW) {
 		advance(); // consume '->'
-		if (current_token.type != TOKEN_INT_TYPE && current_token.type != TOKEN_PTR_TYPE)
+		if (current_token.type != TOKEN_INT_TYPE &&
+			current_token.type != TOKEN_PTR_TYPE &&
+			current_token.type != TOKEN_CHAR_TYPE) {
 			error("Expected return type 'int' or 'ptr'");
+		}
 		advance(); // consume 'int'
 	}
 
@@ -1045,6 +1151,14 @@ int get_offset(char *name)
 void add_symbol(char *name)
 {
 	current_stack_offset -= 8;  // Grow stack down by 8 bytes (64-bit)
+
+	// WARNING CHECK
+	if ((-current_stack_offset) > MAX_STACK_SIZE) {
+		fprintf(stderr, "Warning: Stack overflow detected in function '%s'!\n", current_func_name);
+		fprintf(stderr, "		  Variable '%s' pushes usage to %d bytes (Limit: %d)\n", 
+				name, -current_stack_offset, MAX_STACK_SIZE);
+	}
+
 	strcpy(symbols[symbol_count].name, name);
 	symbols[symbol_count].offset = current_stack_offset;
 	symbol_count++;
@@ -1079,16 +1193,16 @@ void gen_asm(ASTNode *node) {
 			// &x
 			// We need the address of the variable, not its value.
 			// This is equivalent to `lea rax, [rbp - offset]`
-			
+
 			// Note: & only works on variables/arrays, not literals like &(5)
 			if (node->left->type != NODE_VAR_REF && node->left->type != NODE_ARRAY_ACCESS) {
 				printf("; Error: Can only take address of variable\n");
 				exit(1);
 			}
-			
+
 			int offset = get_offset(node->left->var_name);
 			printf("  lea rax, [rbp + %d]\n", offset);
-			
+
 			// If it's an array access (&arr[i]), we need to add the index
 			if (node->left->type == NODE_ARRAY_ACCESS) {
 			   // This is tricky because we need to evaluate the index first.
@@ -1102,7 +1216,7 @@ void gen_asm(ASTNode *node) {
 		case NODE_DEREF:
 			// *ptr
 			gen_asm(node->left); // Evaluate the pointer (puts address in rax)
-			
+
 			printf("  pop rax\n");         // Get Address
 			printf("  mov rax, [rax]\n");  // Load value AT that address
 			printf("  push rax\n");
@@ -1114,7 +1228,7 @@ void gen_asm(ASTNode *node) {
 			if (node->left && node->left->type == NODE_DEREF) {
 				gen_asm(node->right);       // Generate Value (pushes to stack)
 				gen_asm(node->left->left);  // Generate Pointer Address (pushes to stack)
-				
+
 				printf("  pop rax\n");      // Address
 				printf("  pop rbx\n");      // Value
 				printf("  mov [rax], rbx\n"); // Write Value to Address
@@ -1123,17 +1237,17 @@ void gen_asm(ASTNode *node) {
 			else if (node->left && node->left->type == NODE_ARRAY_ACCESS) {
 				gen_asm(node->right);      // Push Value
 				gen_asm(node->left->left); // Push Index
-				
+
 				int offset = get_offset(node->var_name); // var_name is valid ("x")
 				printf("  pop rbx\n");        // Index
 				printf("  pop rax\n");        // Value
-				
+
 				// Calc Address: rbp + offset + (index * 8)
 				printf("  mov rcx, %d\n", offset);
 				printf("  imul rbx, 8\n");
 				printf("  add rcx, rbx\n");
 				printf("  add rcx, rbp\n");
-				
+
 				printf("  mov [rcx], rax\n"); // Store
 			} 
 			// STANDARD VARIABLE ASSIGNMENT (x = val)
@@ -1187,6 +1301,9 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_FUNCTION:
+			// Set current function for warnings
+			current_func_name = node->var_name;
+
 			// Reset symbol table
 			symbol_count = 0;
 			current_stack_offset = 0;
@@ -1202,7 +1319,7 @@ void gen_asm(ASTNode *node) {
 
 			printf("  push rbp\n");
 			printf("  mov rbp, rsp\n");
-			printf("  sub rsp, 4096\n"); // Reserve stack space
+			printf("  sub rsp, %d\n", MAX_STACK_SIZE); // Reserve stack space
 
 			// Handle Parameters (Move registers to stack)
 			ASTNode *param = node->left;
@@ -1339,6 +1456,14 @@ void gen_asm(ASTNode *node) {
 			int size = node->int_value;
 			int total_size = size * 8;
 			current_stack_offset -= total_size;
+
+			// WARNING CHECK FOR ARRAYS
+			if ((-current_stack_offset) > MAX_STACK_SIZE) {
+				fprintf(stderr, "Warning: Stack overflow detected in function '%s'!\n", current_func_name);
+				fprintf(stderr, "         Array '%s' pushes usage to %d bytes (Limit: %d)\n", 
+						node->var_name, -current_stack_offset, MAX_STACK_SIZE);
+			}
+
 			add_symbol(node->var_name);
 			symbols[symbol_count-1].offset = current_stack_offset; 
 			break;
@@ -1452,6 +1577,8 @@ int main(int argc, char **argv)
 	// Cleanup
 	fclose(stdout); 
 	free(source_code);
+
+	if (filename_allocated) free(current_filename);
 
 	return 0;
 }
