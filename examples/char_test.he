@@ -1,0 +1,23 @@
+#include "lib/std.he"
+
+fn main()
+{
+	char c = 'A';
+	print("Character: ");
+	print_char(c);		// Prints 'A'
+	print("\n");
+	
+	// Test math on chars
+	c = c + 1;			// 'A' + 1 = 'B'
+	print("Next: ");
+	print_char(c);		// Prints 'B'
+	print("\n");
+	
+	// Test newline literal
+	char nl = '\n';
+	print("Line 1");
+	print_char(nl);
+	print("Line 2\n");
+	
+	exit(0);
+}
