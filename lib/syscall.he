@@ -1,20 +1,34 @@
 #define SYS_read  0
 #define SYS_write 1
+#define SYS_open  2
+#define SYS_close 3
 #define SYS_exit  60
 
-// Read from fd
+// Read count bytes from fd into buf
 fn read(fd: int, buf: ptr, count: int) -> int
 {
 	return syscall(SYS_read, fd, buf, count);
 }
 
-// Write to a fd
+// Write count bytes to fd from str
 fn write(fd: int, str: ptr, count: int) -> int
 {
 	return syscall(SYS_write, fd, str, count);
 }
 
-// Exit the program
+// Open a fd with flags and mode
+fn open(filename: ptr, flags: int, mode: int) -> int
+{
+	return syscall(SYS_open, filename, flags, mode);
+}
+
+// Close a fd
+fn close(fd: int) -> int
+{
+	return syscall(SYS_close, fd);
+}
+
+// Exit the program with code
 fn exit(code: int) -> int
 {
 	syscall(SYS_exit, code);
