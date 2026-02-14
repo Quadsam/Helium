@@ -85,13 +85,7 @@ int main(int argc, char **argv)
 
 	if (filename_allocated) free(current_filename);
 
-	for (int i = 0; i < macro_count; i++) {
-		if (macros[i].value.name && (
-			macros[i].value.type == TOKEN_IDENTIFIER ||
-			macros[i].value.type == TOKEN_STRING)) {
-			free(macros[i].value.name);
-		}
-	}
+	free_macros();
 
 	return 0;
 }

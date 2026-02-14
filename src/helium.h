@@ -113,6 +113,7 @@ extern int filename_allocated;
 // Lexer
 Token get_next_token(void);
 void advance(void);
+void free_macros(void);
 
 // Parser
 ASTNode *create_node(NodeType type);

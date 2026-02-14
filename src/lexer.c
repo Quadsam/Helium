@@ -31,7 +31,7 @@ Token *get_macro(char *name)
 /* LEXER																	 */
 /* ========================================================================= */
 
-Token get_next_token()
+Token get_next_token(void)
 {
 	// Skip Whitespace and count lines
 	while (source_code[src_pos] != '\0' && isspace(source_code[src_pos])) {
@@ -194,7 +194,7 @@ Token get_next_token()
 			src_pos++; current_col++;   // Skip opening "
 			while (source_code[src_pos] != '"' && source_code[src_pos] != '\0') {
 				if (source_code[src_pos] == '\\' && source_code[src_pos+1] == 'n') {
-					buffer[i++] = '\n';
+					buffer[i++] = '\\'; buffer[i++] = 'n';
 					src_pos += 2; current_col += 2;
 				} else {
 					buffer[i++] = source_code[src_pos++];
@@ -339,7 +339,7 @@ Token get_next_token()
 	}
 }
 
-void advance()
+void advance(void)
 {
 	if (current_token.name) {
 		if (
@@ -359,4 +359,16 @@ void advance()
 	}
 
 	current_token = get_next_token();
+}
+
+void free_macros(void)
+{
+	for (int i = 0; i < macro_count; i++) {
+		// Check if the token inside the macro has an allocated name
+		if (macros[i].value.name && (
+			macros[i].value.type == TOKEN_IDENTIFIER ||
+			macros[i].value.type == TOKEN_STRING)) {
+			free(macros[i].value.name);
+		}
+	}
 }
