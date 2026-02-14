@@ -2,6 +2,7 @@
 #define SYS_write 1
 #define SYS_open  2
 #define SYS_close 3
+#define SYS_stat  4
 #define SYS_exit  60
 
 // Read count bytes from fd into buf
@@ -27,6 +28,24 @@ fn close(fd: int) -> int
 {
 	return syscall(SYS_close, fd);
 }
+
+fn stat(filename: ptr, statbuf: ptr) -> int
+{
+	return syscall(SYS_stat, filename, statbuf);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Exit the program with code
 fn exit(code: int) -> int
