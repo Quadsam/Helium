@@ -166,6 +166,10 @@ The compiler comes with a lightweight standard library that wraps common syscall
 
 4. **Command Line Arguments:** Impliment `argv` and `argc`
 
+5. **Implicit Bounds Checking**
+
+6. **Detailed error messages**
+
 ---
 
 
