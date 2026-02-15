@@ -1,0 +1,9 @@
+// expect-out: Hello from Helium!
+
+#include "lib/std.he"
+
+fn main()
+{
+	print("Hello from Helium!\n");
+	exit(0);
+}

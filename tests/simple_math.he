@@ -1,0 +1,14 @@
+// expect-exit: 15
+// expect-out: Result: 15
+
+#include "lib/std.he"
+
+fn main()
+{
+	int a = 10;
+	int b = 5;
+	print("Result: ");
+	print_int(a + b);
+	print("\n");
+	exit(a + b);
+}

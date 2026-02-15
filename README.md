@@ -31,7 +31,9 @@ sudo apt install build-essential nasm
 Clone the repository and build the `helium` executable:
 
 ```bash
-gcc compiler.c -o helium
+
+git clone https://github.com/Quadsam/Helium
+gcc compiler.c -o helium && ./test.py
 ```
 
 ### 3. Compile "Hello World"
@@ -169,6 +171,10 @@ The compiler comes with a lightweight standard library that wraps common syscall
 5. **Implicit Bounds Checking**
 
 6. **Detailed error messages**
+
+7. **`for` loops**
+
+8. **Optimization passes on generated assembly**
 
 ---
 

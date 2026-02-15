@@ -1,0 +1,9 @@
+// expect-out: Hello, World!
+
+#include "lib/std.he"
+
+fn main()
+{
+	print("Hello, World!\n");
+	exit(0);
+}

@@ -45,5 +45,5 @@ fn main()
 	// Note: buffer refers to the start of the array in memory
 	syscall(1, 1, buffer, 20);
 
-	syscall(60, 0);
+	exit(EXIT_SUCCESS);
 }

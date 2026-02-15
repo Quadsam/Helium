@@ -1,0 +1,53 @@
+#include "lib/std.he"
+
+fn main()
+{
+	// Syscall 2 = OPEN
+	// Arg 1: Filename ("test.txt")
+	// Arg 2: Flags (65 = O_WRONLY | O_CREAT in Linux)
+	// Arg 3: Mode (420 = 0644 octal permissions)
+	// Returns: File Descriptor (fd)
+
+	int result = 1;
+	int statbuf[20]; 
+	int fd = open("test.txt", 65, 420);
+
+	if 1 > 0 {
+		// Write to the file we just opened
+		write(fd, "Helium wrote this file!\n", 24);
+
+		// Close the file
+		close(fd);
+
+		// Make sure it exists
+		result = stat("test.txt", &statbuf);
+	}
+
+	exit(result);
+}
+
+
+// fn main()
+// {
+// 	print("Checking size of 'heliumc'...\n");
+
+// 	// Allocate 144 bytes (18 * 8 bytes) for struct stat
+
+// 	// Pass the buffer to the kernel
+// 	int res = stat("bin/heliumc", &statbuf);
+
+// 	if res < 0 {
+// 		print("Error: Could not stat 'heliumc'. (Did you build the compiler?)\n");
+// 		exit(EXIT_FAILURE);
+// 	}
+
+// 	// st_size is at offset 48. 
+// 	// 48 / 8 bytes per int = Index 6
+// 	int size = statbuf[6];
+
+// 	print("File size: ");
+// 	print_int(size);
+// 	print(" bytes\n");
+
+// 	exit(EXIT_SUCCESS);
+// }

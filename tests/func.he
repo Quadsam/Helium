@@ -1,0 +1,21 @@
+// expect-exit: 30
+
+#include "lib/std.he"
+
+// Define a function with types
+// fn func_name(var_name: var_type, ...) -> return_type
+fn add(a: int, b: int) -> int
+{
+	return a + b;
+}
+
+fn main()
+{
+	int x = 10;
+	int y = 20;
+	
+	// Call works exactly the same
+	int result = add(x, y);
+	
+	exit(result);
+}

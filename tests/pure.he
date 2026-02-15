@@ -1,3 +1,6 @@
+// expect-out: Hi
+// expect-exit: 3
+
 fn main()
 {
 	// Write "Hi" (fd=1, len=2)
@@ -5,5 +8,5 @@ fn main()
 
 	// CRITICAL: You must exit manually!
 	// Returning here would crash because there is nowhere to return to.
-	syscall(60, count); 
+	syscall(60, count);
 }

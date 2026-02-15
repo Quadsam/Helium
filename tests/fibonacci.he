@@ -1,0 +1,17 @@
+// expect-exit: 233
+
+#include "lib/std.he"
+
+fn main()
+{
+	int a = 0;
+	int b = 1;
+	int i = 0;
+		while i < 12 {
+		int temp = a + b;
+		a = b;
+		b = temp;
+		i++;
+	}
+	exit(b);
+}

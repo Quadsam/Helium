@@ -1,3 +1,7 @@
+// expect-exit: 50
+
+#include "lib/std.he"
+
 fn main()
 {
 	int x = 10;
@@ -13,5 +17,5 @@ fn main()
 	*p = 50;
 	
 	// Exit with x (should be 50)
-	syscall(60, x);
+	exit(x);
 }

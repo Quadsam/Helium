@@ -1,8 +1,0 @@
-fn main() {
-    // Syscall 60 is EXIT
-    // Arg 1 is the status code
-    syscall(60, 69);
-    
-    // We should never reach here
-    return 0;
-}

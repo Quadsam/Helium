@@ -1,0 +1,29 @@
+// expect-exit: 0
+
+#include "lib/std.he"
+
+fn main()
+{
+	print("Checking size of 'heliumc'...\n");
+
+	// Allocate 144 bytes (18 * 8 bytes) for struct stat
+	int statbuf[20]; 
+
+	// Pass the buffer to the kernel
+	int res = stat("bin/heliumc", &statbuf);
+
+	if res < 0 {
+		print("Error: Could not stat 'heliumc'. (Did you build the compiler?)\n");
+		exit(EXIT_FAILURE);
+	}
+
+	// st_size is at offset 48. 
+	// 48 / 8 bytes per int = Index 6
+	int size = statbuf[6];
+
+	print("File size: ");
+	print_int(size);
+	print(" bytes\n");
+
+	exit(EXIT_SUCCESS);
+}

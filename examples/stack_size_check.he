@@ -1,6 +1,8 @@
+#include "lib/std.he"
+
 fn main()
 {
 	// 600 * 8 = 4800 bytes (Exceeds 4096)
 	int big_array[600]; 
-	exit(0);
+	exit(EXIT_SUCCESS);
 }

@@ -1,0 +1,14 @@
+// expect-exit: 10
+
+#include "lib/std.he"
+
+fn main()
+{
+	int i = 0;
+
+	while i < 10 {
+		i++;
+	}
+
+	exit(i);
+}

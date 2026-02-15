@@ -1,0 +1,12 @@
+// expect-exit: 69
+
+#include "lib/std.he"
+
+fn main()
+{
+	// You must exit with: stdlib exit() or builtin syscall(60, EXIT_CODE)
+
+	// Syscall 60 is EXIT
+	// Arg 1 is the status code
+	syscall(60, 69);
+}

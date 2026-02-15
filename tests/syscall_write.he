@@ -1,0 +1,15 @@
+// expect-out: Hello, World!
+// expect-exit: 14
+
+#include "lib/std.he"
+
+fn main()
+{
+	// Syscall 1 is WRITE
+	// Arg 1: File Descriptor (1 = stdout)
+	// Arg 2: Buffer (Pointer to string)
+	// Arg 3: Count (Length)
+	int count = syscall(1, 1, "Hello, World!\n", 14);
+	
+	exit(count); // Exit with the number of bytes written
+}
