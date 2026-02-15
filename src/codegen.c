@@ -10,6 +10,27 @@ int new_label()
 	return label_counter++;
 }
 
+
+/* ========================================================================= */
+/* STRUCT REGISTRY															 */
+/* ========================================================================= */
+
+// Structs
+StructDef struct_registry[20];
+int struct_count = 0;
+
+StructDef *get_struct(const char *name)
+{
+	for (int i = 0; i < struct_count; i++) {
+		if (strcmp(struct_registry[i].name, name) == 0)
+			return &struct_registry[i];
+	}
+	return NULL;
+}
+
+
+
+
 /* ========================================================================= */
 /* CODE GENERATOR															 */
 /* ========================================================================= */
@@ -18,35 +39,43 @@ int new_label()
 typedef struct {
 	char name[256];
 	int offset; // e.g., -8, -16
+	char type_name[64]; // int, ptr, Point
 } Symbol;
 
 Symbol symbols[100];
 int symbol_count = 0;
 int current_stack_offset = 0;
 
-int get_offset(char *name)
+Symbol *get_symbol(char *name)
 {
 	for (int i = 0; i < symbol_count; i++) {
 		if (strcmp(symbols[i].name, name) == 0) {
-			return symbols[i].offset;
+			return &symbols[i];
 		}
 	}
-	printf("Error: Undefined variable %s\n", name);
+	error("Undefined variable");
 	exit(1);
 }
 
-void add_symbol(char *name)
+// Wrapper for old calls that just want the offset
+int get_offset(char *name)
 {
-	current_stack_offset -= 8;  // Grow stack down by 8 bytes (64-bit)
+	return get_symbol(name)->offset;
+}
+
+void add_symbol(char *name, char *type_name, int size)
+{
+	current_stack_offset -= size;  // Grow stack down by size bytes
 
 	// WARNING CHECK
 	if ((-current_stack_offset) > MAX_STACK_SIZE) {
 		fprintf(stderr, "Warning: Stack overflow detected in function '%s'!\n", current_func_name);
-		fprintf(stderr, "		  Variable '%s' pushes usage to %d bytes (Limit: %d)\n", 
+		fprintf(stderr, "		  Variable '%s' pushes usage to %d bytes (Limit: %d)\n",
 				name, -current_stack_offset, MAX_STACK_SIZE);
 	}
 
 	strcpy(symbols[symbol_count].name, name);
+	strcpy(symbols[symbol_count].type_name, type_name);
 	symbols[symbol_count].offset = current_stack_offset;
 	symbol_count++;
 }
@@ -61,58 +90,169 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_VAR_REF: {
-			int offset = get_offset(node->var_name);
-			printf("  mov rax, [rbp + %d]\n", offset); // Load from stack
+			Symbol *sym = get_symbol(node->var_name);
+
+			// If it's a STRUCT, we push its address (like an array)
+			// If it's an INT/PTR, we push its value
+			StructDef *sdef = get_struct(sym->type_name);
+			if (sdef) {
+				// Struct: Push address (lea)
+				// This allows 'p = p2' to work via memcpy logic if we implemented it,
+				// but for now, passing structs by value isn't fully supported.
+				// We treat struct vars as their base address for member access.
+				printf("  lea rax, [rbp + %d]\n", sym->offset);
+			} else {
+				// Primitive: Push value
+				printf("  mov rax, [rbp + %d]\n", sym->offset);
+			}
 			printf("  push rax\n");
 			break;
 		}
 
-		case NODE_VAR_DECL:
-			// Calculate value
-			gen_asm(node->left); 
-			// Assign symbol
-			add_symbol(node->var_name);
-			// Move from stack to local variable slot
-			printf("  pop rax\n");
-			printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
-			break;
-		case NODE_ADDR: {
-			// &x
-			// We need the address of the variable, not its value.
-			// This is equivalent to `lea rax, [rbp - offset]`
+		case NODE_VAR_DECL: {
+			// Determine Type & Size
+			char *type = node->member_name; // We stored type here in Parser
+			if (type == NULL) type = "int"; // Default safety
 
-			// Note: & only works on variables/arrays, not literals like &(5)
-			if (node->left->type != NODE_VAR_REF && node->left->type != NODE_ARRAY_ACCESS) {
-				printf("; Error: Can only take address of variable\n");
+			int size = 8;
+			StructDef *sdef = get_struct(type);
+			if (sdef) {
+				size = sdef->size;
+			}
+
+			// Evaluate Initializer (if any)
+			if (node->left) {
+				 gen_asm(node->left);
+			} else {
+				// If no initializer (e.g. 'Point p;'), verify we reserve space
+				// but we don't push anything.
+				// Actually, our stack convention requires the value to be on stack
+				// to pop into the variable slot.
+				// For structs, we usually just reserve space.
+			}
+
+			// Register Symbol
+			add_symbol(node->var_name, type, size);
+
+			// Move data from stack to variable slot
+			if (node->left) {
+				// If it's a primitive, pop into [rbp + offset]
+				if (!sdef) {
+					printf("  pop rax\n");
+					printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
+				}
+				// If it's a struct assignment (Point p = other_p), we need memcpy?
+				// For this tutorial, we assume 'Point p;' (no init) or manual member init.
+			}
+			break;
+		}
+
+		case NODE_MEMBER_ACCESS: {
+			// node->left is the variable (e.g., 'p' in 'p.x')
+			// node->member_name is "x"
+
+			if (node->left->type != NODE_VAR_REF) {
+				fprintf(stderr, "Error: Member access only supported on variables\n");
 				exit(1);
 			}
 
-			int offset = get_offset(node->left->var_name);
-			printf("  lea rax, [rbp + %d]\n", offset);
+			// 1. Find variable 'p'
+			Symbol *sym = get_symbol(node->left->var_name);
 
+			// 2. Find struct definition 'Point'
+			StructDef *sdef = get_struct(sym->type_name);
+			if (!sdef) {
+				fprintf(stderr, "Error: Variable '%s' is not a struct\n", sym->name);
+				exit(1);
+			}
+
+			// 3. Find member 'x' offset
+			int mem_offset = -1;
+			for (int i = 0; i < sdef->member_count; i++) {
+				if (strcmp(sdef->members[i].name, node->member_name) == 0) {
+					mem_offset = sdef->members[i].offset;
+					break;
+				}
+			}
+			if (mem_offset == -1) {
+				fprintf(stderr, "Error: Struct '%s' has no member '%s'\n", sdef->name, node->member_name);
+				exit(1);
+			}
+
+			// 4. Calculate Address: rbp + struct_base + member_offset
+			// Stack grows down, but struct layout is positive from base?
+			// If p is at -16 (size 16), it spans -16 to 0.
+			// sdef->members[0] is at offset 0.
+			// So address is (rbp + sym->offset) + mem_offset.
+
+			int total_offset = sym->offset + mem_offset;
+
+			// For reading (right side of assignment): Load value
+			// For writing (left side): handled in NODE_ASSIGN special case?
+			// Current naive implementation: Load Value.
+			printf("  mov rax, [rbp + %d]\n", total_offset);
+			printf("  push rax\n");
+			break;
+		}
+
+		case NODE_ADDR: {
+			// &p.x
+			if (node->left->type == NODE_MEMBER_ACCESS) {
+				ASTNode *access = node->left;
+				Symbol *sym = get_symbol(access->left->var_name);
+				StructDef *sdef = get_struct(sym->type_name);
+
+				int mem_offset = 0;
+				for (int i=0; i<sdef->member_count; i++) {
+					 if (strcmp(sdef->members[i].name, access->member_name) == 0) {
+						 mem_offset = sdef->members[i].offset;
+						 break;
+					 }
+				}
+				int total_offset = sym->offset + mem_offset;
+				printf("  lea rax, [rbp + %d]\n", total_offset);
+				printf("  push rax\n");
+				break;
+			}
+
+			// Standard variable &x
+			if (node->left->type == NODE_VAR_REF) {
+				int offset = get_offset(node->left->var_name);
+				printf("  lea rax, [rbp + %d]\n", offset);
+				printf("  push rax\n");
+				break;
+			}
 			// If it's an array access (&arr[i]), we need to add the index
 			if (node->left->type == NODE_ARRAY_ACCESS) {
 			   // This is tricky because we need to evaluate the index first.
 			   // For simplicity, let's just support basic variable addresses for now.
 			}
-
-			printf("  push rax\n");
 			break;
 		}
 
-		case NODE_DEREF:
-			// *ptr
-			gen_asm(node->left); // Evaluate the pointer (puts address in rax)
-
-			printf("  pop rax\n");         // Get Address
-			printf("  mov rax, [rax]\n");  // Load value AT that address
-			printf("  push rax\n");
-			break;
-
 		case NODE_ASSIGN:
+			// MEMBER ASSIGNMENT (p.x = 10)
+			if (node->left && node->left->type == NODE_MEMBER_ACCESS) {
+				gen_asm(node->right); // Push Value
+
+				ASTNode *access = node->left;
+				Symbol *sym = get_symbol(access->left->var_name);
+				StructDef *sdef = get_struct(sym->type_name);
+
+				int mem_offset = 0;
+				for (int i=0; i<sdef->member_count; i++) {
+					 if (strcmp(sdef->members[i].name, access->member_name) == 0) {
+						 mem_offset = sdef->members[i].offset;
+						 break;
+					 }
+				}
+
+				printf("  pop rax\n"); // Value
+				int total_offset = sym->offset + mem_offset;
+				printf("  mov [rbp + %d], rax\n", total_offset);
+			}
 			// POINTER ASSIGNMENT (*ptr = val)
-			// We check this FIRST because var_name is NULL here.
-			if (node->left && node->left->type == NODE_DEREF) {
+			else if (node->left && node->left->type == NODE_DEREF) {
 				gen_asm(node->right);       // Generate Value (pushes to stack)
 				gen_asm(node->left->left);  // Generate Pointer Address (pushes to stack)
 
@@ -125,7 +265,7 @@ void gen_asm(ASTNode *node) {
 				gen_asm(node->right);      // Push Value
 				gen_asm(node->left->left); // Push Index
 
-				int offset = get_offset(node->var_name); // var_name is valid ("x")
+				int offset = get_offset(node->left->var_name);
 				printf("  pop rbx\n");        // Index
 				printf("  pop rax\n");        // Value
 
@@ -136,15 +276,13 @@ void gen_asm(ASTNode *node) {
 				printf("  add rcx, rbp\n");
 
 				printf("  mov [rcx], rax\n"); // Store
-			} 
+			}
 			// STANDARD VARIABLE ASSIGNMENT (x = val)
 			else {
-				// Safety check
 				if (node->var_name == NULL) {
 					 fprintf(stderr, "Compiler Error: Assignment with NULL variable name\n");
 					 exit(1);
 				}
-
 				gen_asm(node->right);
 				printf("  pop rax\n");
 				printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
@@ -208,15 +346,18 @@ void gen_asm(ASTNode *node) {
 			printf("  mov rbp, rsp\n");
 			printf("  sub rsp, %d\n", MAX_STACK_SIZE); // Reserve stack space
 
-			// Handle Parameters (Move registers to stack)
+			// Handle Parameters
 			ASTNode *param = node->left;
 			int param_idx = 0;
 			const char* regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
 			while (param) {
-				add_symbol(param->var_name);
-				int offset = get_offset(param->var_name);
+				// For params, type is usually int/ptr.
+				// We use member_name as type (see parser).
+				char *type = param->member_name ? param->member_name : "int";
+				add_symbol(param->var_name, type, 8); // Params are always 8 bytes on stack
 
+				int offset = get_offset(param->var_name);
 				if (param_idx < 6) {
 					printf("  mov [rbp + %d], %s\n", offset, regs[param_idx]);
 				}
@@ -294,7 +435,7 @@ void gen_asm(ASTNode *node) {
 			int arg_count = 0;
 			ASTNode* arg = node->left;
 			while (arg) {
-				gen_asm(arg); 
+				gen_asm(arg);
 				arg_count++;
 				arg = arg->next;
 			}
@@ -342,17 +483,7 @@ void gen_asm(ASTNode *node) {
 		case NODE_ARRAY_DECL: {
 			int size = node->int_value;
 			int total_size = size * 8;
-			current_stack_offset -= total_size;
-
-			// WARNING CHECK FOR ARRAYS
-			if ((-current_stack_offset) > MAX_STACK_SIZE) {
-				fprintf(stderr, "Warning: Stack overflow detected in function '%s'!\n", current_func_name);
-				fprintf(stderr, "         Array '%s' pushes usage to %d bytes (Limit: %d)\n", 
-						node->var_name, -current_stack_offset, MAX_STACK_SIZE);
-			}
-
-			add_symbol(node->var_name);
-			symbols[symbol_count-1].offset = current_stack_offset; 
+			add_symbol(node->var_name, "int[]", total_size);
 			break;
 		}
 
@@ -371,11 +502,19 @@ void gen_asm(ASTNode *node) {
 			break;
 		}
 
+		case NODE_DEREF:
+			gen_asm(node->left); // Evaluate the pointer (puts address in rax)
+
+			printf("  pop rax\n");         // Get Address
+			printf("  mov rax, [rax]\n");  // Load value AT that address
+			printf("  push rax\n");
+			break;
+
 		case NODE_FUNC_CALL: {
 			int arg_count = 0;
 			ASTNode* arg = node->left;
 			while (arg) {
-				gen_asm(arg); 
+				gen_asm(arg);
 				arg_count++;
 				arg = arg->next;
 			}

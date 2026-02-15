@@ -73,8 +73,10 @@ int main(int argc, char **argv)
 			ASTNode* func = parse_function();
 			gen_asm(func);
 			free_ast(func);    // Free each function after generating code
+		} else if (current_token.type == TOKEN_STRUCT) {
+			parse_struct_definition();
 		} else {
-			// Skip imports or unknown top-level tokens for now
+			// Skip imports/macros
 			advance();
 		}
 	}

@@ -27,6 +27,18 @@ Token *get_macro(char *name)
 	return NULL;
 }
 
+void free_macros(void)
+{
+	for (int i = 0; i < macro_count; i++) {
+		// Check if the token inside the macro has an allocated name
+		if (macros[i].value.name && (
+			macros[i].value.type == TOKEN_IDENTIFIER ||
+			macros[i].value.type == TOKEN_STRING)) {
+			free(macros[i].value.name);
+		}
+	}
+}
+
 /* ========================================================================= */
 /* LEXER																	 */
 /* ========================================================================= */
@@ -75,6 +87,7 @@ Token get_next_token(void)
 		else if (strcmp(t.name, "int")      == 0) t.type = TOKEN_INT_TYPE;
 		else if (strcmp(t.name, "ptr")      == 0) t.type = TOKEN_PTR_TYPE;
 		else if (strcmp(t.name, "char")     == 0) t.type = TOKEN_CHAR_TYPE;
+		else if (strcmp(t.name, "struct")   == 0) t.type = TOKEN_STRUCT;
 		else if (strcmp(t.name, "return")   == 0) t.type = TOKEN_RETURN;
 		else if (strcmp(t.name, "if")       == 0) t.type = TOKEN_IF;
 		else if (strcmp(t.name, "else")     == 0) t.type = TOKEN_ELSE;
@@ -133,6 +146,7 @@ Token get_next_token(void)
 		case ',': src_pos++; current_col++; return (Token){",", TOKEN_COMMA, 0, start_line, start_col};
 		case ';': src_pos++; current_col++; return (Token){";", TOKEN_SEMI, 0, start_line, start_col};
 		case ':': src_pos++; current_col++; return (Token){":", TOKEN_COLON, 0, start_line, start_col};
+		case '.': src_pos++; current_col++;	return (Token){".", TOKEN_PERIOD, 0, start_line, start_col};
 		case '*': src_pos++; current_col++; return (Token){"*", TOKEN_STAR, 0, start_line, start_col};
 		case '|': src_pos++; current_col++; return (Token){"|", TOKEN_PIPE, 0, start_line, start_col};
 		case '&': src_pos++; current_col++; return (Token){"&", TOKEN_AMP, 0, start_line, start_col};
@@ -349,6 +363,7 @@ void advance(void)
 			current_token.type == TOKEN_INT_TYPE ||
 			current_token.type == TOKEN_PTR_TYPE ||
 			current_token.type == TOKEN_CHAR_TYPE ||
+			current_token.type == TOKEN_STRUCT ||
 			current_token.type == TOKEN_RETURN ||
 			current_token.type == TOKEN_IF ||
 			current_token.type == TOKEN_ELSE ||
@@ -359,16 +374,4 @@ void advance(void)
 	}
 
 	current_token = get_next_token();
-}
-
-void free_macros(void)
-{
-	for (int i = 0; i < macro_count; i++) {
-		// Check if the token inside the macro has an allocated name
-		if (macros[i].value.name && (
-			macros[i].value.type == TOKEN_IDENTIFIER ||
-			macros[i].value.type == TOKEN_STRING)) {
-			free(macros[i].value.name);
-		}
-	}
 }

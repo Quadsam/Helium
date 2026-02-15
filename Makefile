@@ -48,6 +48,9 @@ $(OBJ_DIR)/$(MODE)/%.o: $(SRC_DIR)/%.c
 run: all
 	@./$(BIN_DIR)/$(TARGET)
 
+test: all
+	@./tests/test.py
+
 ## check: Runs static analysis using cppcheck
 check:
 	@echo "  LINT"

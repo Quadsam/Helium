@@ -1,0 +1,35 @@
+// expect-out: Point: 10, 20
+// expect-out: Modified Y: 50
+
+#include "lib/std.he"
+
+struct Point {
+	x: int,
+	y: int,
+};
+
+fn main()
+{
+	// Declare struct (allocates 16 bytes on stack)
+	Point p;
+
+	// Write Members
+	p.x = 10;
+	p.y = 20;
+
+	print("Point: ");
+	print_int(p.x);
+	print(", ");
+	print_int(p.y);
+	print("\n");
+
+	// Address of Members
+	int ptr_to_y = &p.y;
+	*ptr_to_y = 50;
+
+	print("Modified Y: ");
+	print_int(p.y);
+	print("\n");
+
+	exit(0);
+}

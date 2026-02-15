@@ -19,6 +19,7 @@ typedef enum {
 	TOKEN_CHAR,			// 'a'
 	TOKEN_CHAR_TYPE,	// char
 	TOKEN_PTR_TYPE,		// ptr
+	TOKEN_STRUCT,		// struct
 	TOKEN_RETURN,		// return
 	TOKEN_LPAREN,		// (
 	TOKEN_RPAREN,		// )
@@ -29,6 +30,7 @@ typedef enum {
 	TOKEN_COMMA,		// ,
 	TOKEN_SEMI,			// ;
 	TOKEN_COLON,		// :
+	TOKEN_PERIOD,		// .
 	TOKEN_ASSIGN,		// =
 	TOKEN_PLUS,			// +
 	TOKEN_INC,			// ++
@@ -77,6 +79,8 @@ typedef enum {
 	NODE_STRING,        // "string"
 	NODE_ARRAY_DECL,    // int x[10];
 	NODE_ARRAY_ACCESS,  // x[i]
+	NODE_MEMBER_ACCESS,	// p.x
+	NODE_STRUCT_DEFN,	// struct Point { x: int ... }
 	NODE_FUNC_CALL,     // add(1, 2);
 	NODE_ADDR,          // &x (Address of)
 	NODE_DEREF,         // *x (Dereference)
@@ -86,12 +90,27 @@ typedef struct ASTNode {
 	NodeType type;
 	int int_value;          // For literals
 	char *var_name;         // For references/declarations
+	char *member_name;		// For p.x, this stores "x"
 	char op;                // For binary ops
 	struct ASTNode *left;   // Left child
 	struct ASTNode *right;  // Right child
 	struct ASTNode *body;   // For functions
 	struct ASTNode *next;   // For linked lists in blocks
 } ASTNode;
+
+
+// --- Struct Registry ---
+typedef struct {
+	char name[64];
+	int offset;		// Offset from the start of the struct
+} StructMember;
+
+typedef struct {
+	char name[64];
+	StructMember members[20];	// Max of 20 for now
+	int member_count;
+	int size;					// Total size (bytes)
+} StructDef;
 
 /* ========================================================================= */
 /* GLOBAL VARIABLES															 */
@@ -102,9 +121,13 @@ extern char *source_code;
 extern char *current_filename;
 extern char *current_func_name;
 extern int src_pos;
-extern int current_line;
 extern int current_col;
+extern int current_line;
 extern int filename_allocated;
+
+// Struct Registry Globals
+extern StructDef struct_registry[20];
+extern int struct_count;
 
 /* ========================================================================= */
 /* FUNCTION PROTOTYPES														 */
@@ -118,10 +141,13 @@ void free_macros(void);
 // Parser
 ASTNode *create_node(NodeType type);
 ASTNode *parse_function(void);
+ASTNode *parse_struct_definition(void);
 void free_ast(ASTNode *node);
 
 // Codegen
 void gen_asm(ASTNode *node);
+StructDef *get_struct(const char *name);
+
 
 // Preprocessor
 char *preprocess_file(const char *filename);

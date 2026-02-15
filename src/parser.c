@@ -1,7 +1,7 @@
 #include "helium.h"
 
 /* ========================================================================= */
-/* AST																		 */
+/* AST                                                                       */
 /* ========================================================================= */
 
 // Helper to make a new node
@@ -11,33 +11,29 @@ ASTNode *create_node(NodeType type)
 	node->type = type;
 	node->left = node->right = node->body = node->next = NULL;
 	node->var_name = NULL;
+	node->member_name = NULL; // Initialize new field
 	return node;
 }
 
 /* ========================================================================= */
-/* PARSER																	 */
+/* PARSER                                                                    */
 /* ========================================================================= */
 
-ASTNode *parse_expression();
-ASTNode *parse_block();
-ASTNode *parse_syscall();
+ASTNode *parse_expression(void);
+ASTNode *parse_block(void);
+ASTNode *parse_syscall(void);
+ASTNode *parse_struct_definition(void);
 
-
-ASTNode *parse_if()
+ASTNode *parse_if(void)
 {
 	advance(); // Skip 'if'
 
-	// Parse Condition (no parens required in Helium)
 	ASTNode *condition = parse_expression();
-
-	// Parse 'If' Body
 	ASTNode *if_body = parse_block();
 
-	// Handle 'Else' (Optional)
 	ASTNode *else_body = NULL;
 	if (current_token.type == TOKEN_ELSE) {
 		advance();
-		// Support 'else if' by checking if next token is IF
 		if (current_token.type == TOKEN_IF) {
 			else_body = parse_if(); // Recursion for 'else if'
 		} else {
@@ -52,7 +48,7 @@ ASTNode *parse_if()
 	return node;
 }
 
-ASTNode *parse_while()
+ASTNode *parse_while(void)
 {
 	advance();  // Skip 'while'
 
@@ -65,8 +61,8 @@ ASTNode *parse_while()
 	return node;
 }
 
-// Factor: handles integers
-ASTNode *parse_factor()
+// Factor: handles integers, variables, access
+ASTNode *parse_factor(void)
 {
 	// Handle Integers
 	if (current_token.type == TOKEN_INT) {
@@ -78,26 +74,39 @@ ASTNode *parse_factor()
 
 	// Handle Characters ('a')
 	if (current_token.type == TOKEN_CHAR) {
-		ASTNode *node = create_node(NODE_INT); // We treat chars as ints internally
+		ASTNode *node = create_node(NODE_INT);
 		node->int_value = current_token.value;
 		advance();
 		return node;
 	}
 
-	// Handle Variables (Identifiers)
+	// Handle Variables & Member Access
 	if (current_token.type == TOKEN_IDENTIFIER) {
 		ASTNode *node = create_node(NODE_VAR_REF);
 		node->var_name = strdup(current_token.name);
 		advance();
 
-		// Function Call: add(1, 2)
+		// 1. Check for Member Access: p.x
+		if (current_token.type == TOKEN_PERIOD) {
+			advance(); // Consume '.'
+			if (current_token.type != TOKEN_IDENTIFIER) error("Expected member name");
+
+			ASTNode *access = create_node(NODE_MEMBER_ACCESS);
+			access->left = node; // The 'p'
+			access->member_name = strdup(current_token.name); // The 'x'
+			advance();
+
+			// Allow chaining? (p.x.y) - Not for V1 (structs can't contain structs yet)
+			return access;
+		}
+
+		// 2. Check for Function Call: add(1, 2)
 		if (current_token.type == TOKEN_LPAREN) {
 			advance();  // consume '('
 
 			ASTNode *call_node = create_node(NODE_FUNC_CALL);
 			call_node->var_name = node->var_name; // Reuse name
 
-			// Parse Arguments
 			ASTNode *current_arg = NULL;
 			while (current_token.type != TOKEN_RPAREN) {
 				ASTNode *expr = parse_expression();
@@ -119,54 +128,50 @@ ASTNode *parse_factor()
 			return call_node;
 		}
 
-		// Array Access: x[i]
+		// 3. Check for Array Access: x[i]
 		if (current_token.type == TOKEN_LBRACKET) {
 			advance();  // consume '['
 			ASTNode *index = parse_expression();
 			if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
 			advance();  // consume ']'
 
-			// Convert to ARRAY_ACCESS node
 			ASTNode *array_node = create_node(NODE_ARRAY_ACCESS);
 			array_node->var_name = node->var_name;
-			array_node->left = index; 
+			array_node->left = index;
 
-			free(node); // Cleanup
+			free(node);
 			return array_node;
 		}
 
-		// Post-Increment: i++
+		// 4. Post-Increment: i++
 		if (current_token.type == TOKEN_INC) {
 			advance();
 			ASTNode* inc_node = create_node(NODE_POST_INC);
-			inc_node->left = node; 
+			inc_node->left = node;
 			return inc_node;
 		}
 
 		return node;
 	}
 
-	// Handle Parentheses (Expression grouping)
+	// Handle Parentheses
 	if (current_token.type == TOKEN_LPAREN) {
 		advance();
 		ASTNode *node = parse_expression();
 		if (current_token.type != TOKEN_RPAREN) {
 			error("Syntax Error: Expected ')'");
-			exit(1);
 		}
 		advance();
 		return node;
 	}
 
-	// Handle syscalls
 	if (current_token.type == TOKEN_SYSCALL) {
 		return parse_syscall();
 	}
 
-	// Handle String Literals
 	if (current_token.type == TOKEN_STRING) {
 		ASTNode *node = create_node(NODE_STRING);
-		node->var_name = strdup(current_token.name);    // Store the string content
+		node->var_name = strdup(current_token.name);
 		advance();
 		return node;
 	}
@@ -175,13 +180,13 @@ ASTNode *parse_factor()
 	exit(1);
 }
 
-ASTNode *parse_unary()
+ASTNode *parse_unary(void)
 {
-	// Address Of (&x)
+	// Address Of (&x or &p.x)
 	if (current_token.type == TOKEN_AMP) {
 		advance();
 		ASTNode *node = create_node(NODE_ADDR);
-		node->left = parse_unary();         // Recursive to handle &*x
+		node->left = parse_unary();
 		return node;
 	}
 
@@ -189,7 +194,7 @@ ASTNode *parse_unary()
 	if (current_token.type == TOKEN_STAR) {
 		advance();
 		ASTNode *node = create_node(NODE_DEREF);
-		node->left = parse_unary();         // Recursive to handle **x
+		node->left = parse_unary();
 		return node;
 	}
 
@@ -198,7 +203,7 @@ ASTNode *parse_unary()
 		advance();
 		ASTNode *node = create_node(NODE_BINOP);
 		node->op = '-';
-		node->left = create_node(NODE_INT); // Implicit 0 - x
+		node->left = create_node(NODE_INT);
 		node->left->int_value = 0;
 		node->right = parse_unary();
 		return node;
@@ -207,8 +212,7 @@ ASTNode *parse_unary()
 	return parse_factor();
 }
 
-// Term: handles * and /
-ASTNode *parse_term()
+ASTNode *parse_term(void)
 {
 	ASTNode *node = parse_unary();
 	while (current_token.type == TOKEN_STAR || current_token.type == TOKEN_SLASH) {
@@ -222,8 +226,7 @@ ASTNode *parse_term()
 	return node;
 }
 
-// Expression: handles + and -
-ASTNode *parse_math()
+ASTNode *parse_math(void)
 {
 	ASTNode *node = parse_term();
 	while (current_token.type == TOKEN_PLUS || current_token.type == TOKEN_MINUS) {
@@ -237,37 +240,25 @@ ASTNode *parse_math()
 	return node;
 }
 
-ASTNode *parse_bitwise() {
-	// Parse the left side (Math: +, -)
+ASTNode *parse_bitwise(void) {
 	ASTNode *node = parse_math();
-
-	// Look for & or |
 	while (current_token.type == TOKEN_AMP || current_token.type == TOKEN_PIPE) {
 		char op = (current_token.type == TOKEN_AMP) ? '&' : '|';
-
-		// We reuse NODE_BINOP for convenience
 		ASTNode *newNode = create_node(NODE_BINOP);
 		newNode->op = op;
 		newNode->left = node;
-
 		advance();
-
-		// 3. Parse the right side
 		newNode->right = parse_math();
-
 		node = newNode;
 	}
 	return node;
 }
 
-ASTNode *parse_comparison()
+ASTNode *parse_comparison(void)
 {
 	ASTNode *node = parse_bitwise();
-
-	// While current token is <, >, ==, !=
-	while (current_token.type == TOKEN_GT || current_token.type == TOKEN_LT || 
+	while (current_token.type == TOKEN_GT || current_token.type == TOKEN_LT ||
 		   current_token.type == TOKEN_EQ || current_token.type == TOKEN_NEQ) {
-
 		NodeType type;
 		if (current_token.type == TOKEN_GT) type = NODE_GT;
 		if (current_token.type == TOKEN_LT) type = NODE_LT;
@@ -283,7 +274,7 @@ ASTNode *parse_comparison()
 	return node;
 }
 
-ASTNode *parse_expression()
+ASTNode *parse_expression(void)
 {
 	ASTNode* lhs = parse_comparison();
 
@@ -291,29 +282,29 @@ ASTNode *parse_expression()
 	if (current_token.type == TOKEN_ASSIGN) {
 		advance(); // consume '='
 
-		// Check valid L-value: Var, Array, or DEREF
-		if (lhs->type != NODE_VAR_REF && lhs->type != NODE_ARRAY_ACCESS && lhs->type != NODE_DEREF)
+		// Check valid L-value: Var, Array, Deref, or MEMBER ACCESS
+		if (lhs->type != NODE_VAR_REF &&
+			lhs->type != NODE_ARRAY_ACCESS &&
+			lhs->type != NODE_DEREF &&
+			lhs->type != NODE_MEMBER_ACCESS)
 			error("Syntax Error: Invalid l-value.");
 
 		ASTNode *assign = create_node(NODE_ASSIGN);
 
-		// Handle Pointer Assignment (*ptr = val)
 		if (lhs->type == NODE_DEREF) {
 			assign->left = lhs;
-			// DEREF nodes don't have names, but we might need a dummy one to avoid segfaults 
-			// if other code checks var_name. Ideally we check type first.
 			assign->var_name = NULL;
 		} else if (lhs->type == NODE_ARRAY_ACCESS) {
-			assign->left = lhs; 
-			// FIX: Use strdup to create a COPY of the string.
-			// Now both nodes own their own string memory.
-			assign->var_name = strdup(lhs->var_name); 
+			assign->left = lhs;
+			assign->var_name = NULL;
+		} else if (lhs->type == NODE_MEMBER_ACCESS) {
+			assign->left = lhs;
+			assign->var_name = NULL;
 		} else {
-			// For normal variables, we destroy the old node (lhs),
-			// so we can just steal its pointer safely.
+			// Normal var
 			assign->var_name = lhs->var_name;
-			assign->left = NULL; 
-			free(lhs); // Free the shell (struct only)
+			assign->left = NULL;
+			free(lhs);
 		}
 
 		assign->right = parse_expression();
@@ -322,33 +313,103 @@ ASTNode *parse_expression()
 	return lhs;
 }
 
-// Note: We check specifically for 'int', 'char', or 'ptr' types here
-ASTNode *parse_var_declaration()
+// Struct Definition: struct Point { x: int, y: int }
+ASTNode *parse_struct_definition(void)
 {
-	if (current_token.type != TOKEN_INT_TYPE &&
-		current_token.type != TOKEN_PTR_TYPE &&
-		current_token.type != TOKEN_CHAR_TYPE) {
+	advance(); // Skip 'struct'
+
+	if (current_token.type != TOKEN_IDENTIFIER) error("Expected struct name");
+	char *struct_name = strdup(current_token.name);
+	advance();
+
+	if (current_token.type != TOKEN_LBRACE) error("Expected '{'");
+	advance();
+
+	// Create Entry in Registry
+	StructDef *new_struct = &struct_registry[struct_count++];
+	strcpy(new_struct->name, struct_name);
+	new_struct->member_count = 0;
+	new_struct->size = 0;
+
+	while (current_token.type != TOKEN_RBRACE) {
+		if (current_token.type != TOKEN_IDENTIFIER) error("Expected member name");
+		char *mem_name = strdup(current_token.name);
+		advance();
+
+		if (current_token.type != TOKEN_COLON) error("Expected ':'");
+		advance();
+
+		// Parse Type (int, ptr, char)
+		int mem_size = 8; // Default 8 bytes
+		// In the future we can support nested structs here
+		if (current_token.type == TOKEN_INT_TYPE ||
+			current_token.type == TOKEN_PTR_TYPE ||
+			current_token.type == TOKEN_CHAR_TYPE) {
+			advance();
+		} else {
+			error("Unknown member type");
+		}
+
+		// Add Member
+		strcpy(new_struct->members[new_struct->member_count].name, mem_name);
+		new_struct->members[new_struct->member_count].offset = new_struct->size;
+		new_struct->member_count++;
+		new_struct->size += mem_size;
+
+		if (current_token.type == TOKEN_COMMA) advance();
+		free(mem_name);
+	}
+
+	advance(); // Skip '}'
+
+	// Optional semicolon
+	if (current_token.type == TOKEN_SEMI) advance();
+
+	free(struct_name);
+	return NULL; // No executable code generated
+}
+
+// Variable Declaration: int x; OR Point p;
+ASTNode *parse_var_declaration(void)
+{
+	char *type_name = NULL;
+
+	// 1. Detect Type
+	if (current_token.type == TOKEN_INT_TYPE) {
+		type_name = "int";
+		advance();
+	} else if (current_token.type == TOKEN_PTR_TYPE) {
+		type_name = "ptr";
+		advance();
+	} else if (current_token.type == TOKEN_CHAR_TYPE) {
+		type_name = "char";
+		advance();
+	} else if (current_token.type == TOKEN_IDENTIFIER) {
+		// Check if it's a known struct
+		if (get_struct(current_token.name)) {
+			type_name = strdup(current_token.name);
+			advance();
+		} else {
+			error("Unknown type specifier");
+		}
+	} else {
 		error("Expected type specifier");
 	}
-	advance();	// Consume type (int/ptr/char)
 
 	if (current_token.type != TOKEN_IDENTIFIER) error("Expected variable name");
 	char *name = strdup(current_token.name);
 	advance();
 
-	// Check for Array Declaration: int x[10];
+	// Array: int x[10];
 	if (current_token.type == TOKEN_LBRACKET) {
-		advance();  // consume '['
-
-		if (current_token.type != TOKEN_INT) error("Array size must be an integer literal");
+		advance();
+		if (current_token.type != TOKEN_INT) error("Array size must be integer literal");
 		int size = current_token.value;
-		advance();  // consume size
-
+		advance();
 		if (current_token.type != TOKEN_RBRACKET) error("Expected ']'");
-		advance();  // consume ']'
-
+		advance();
 		if (current_token.type != TOKEN_SEMI) error("Expected ';'");
-		advance();  // consume ';'
+		advance();
 
 		ASTNode *node = create_node(NODE_ARRAY_DECL);
 		node->var_name = name;
@@ -356,207 +417,184 @@ ASTNode *parse_var_declaration()
 		return node;
 	}
 
-	// Normal Variable Declaration: int x = 5;
-	if (current_token.type != TOKEN_ASSIGN) error("Expected '=' or '['");
-	advance(); // consume '='
-
+	// Variable: int x = 5; OR Point p;
 	ASTNode *node = create_node(NODE_VAR_DECL);
 	node->var_name = name;
-	node->left = parse_expression();
+	// CRITICAL: Pass the type name to Codegen!
+	// We use member_name field to store the type name string for declarations
+	node->member_name = type_name ? strdup(type_name) : strdup("int");
+
+	if (current_token.type == TOKEN_ASSIGN) {
+		advance();
+		node->left = parse_expression();
+	}
 
 	if (current_token.type != TOKEN_SEMI) error("Expected ';' after declaration");
-	advance(); // consume ';'
+	advance();
+
+	if (type_name && strcmp(type_name, "int") != 0 && strcmp(type_name, "ptr") != 0 && strcmp(type_name, "char") != 0) {
+		free(type_name);
+	}
+
 	return node;
 }
 
-
-ASTNode *parse_statement()
+ASTNode *parse_statement(void)
 {
-	// Return Statement
 	if (current_token.type == TOKEN_RETURN) {
 		advance();
 		ASTNode *node = create_node(NODE_RETURN);
 		node->left = parse_expression();
-		if (current_token.type != TOKEN_SEMI) {
-			error("Error: Expected ';' after return");
-		}
+		if (current_token.type != TOKEN_SEMI) error("Expected ';'");
 		advance();
 		return node;
 	}
 
-	// Variable Declaration (int x... OR ptr x...)
+	// Struct Definition
+	if (current_token.type == TOKEN_STRUCT) {
+		return parse_struct_definition();
+	}
+
+	// Variable Declarations (int, ptr, char, OR struct names)
 	if (current_token.type == TOKEN_INT_TYPE ||
 		current_token.type == TOKEN_PTR_TYPE ||
 		current_token.type == TOKEN_CHAR_TYPE) {
-		return parse_var_declaration(); 
+		return parse_var_declaration();
+	}
+
+	// Check for "Point p;" where Point is an identifier
+	if (current_token.type == TOKEN_IDENTIFIER) {
+		// Look ahead? No, get_struct handles lookup.
+		if (get_struct(current_token.name)) {
+			return parse_var_declaration();
+		}
 	}
 
 	if (current_token.type == TOKEN_IF) return parse_if();
 	if (current_token.type == TOKEN_WHILE) return parse_while();
 
-
-	// Default: Expression statement (x = 5;)
 	ASTNode *node = parse_expression();
-	if (current_token.type != TOKEN_SEMI)
-		error("Error: Expected ';' after expression");
-
+	if (current_token.type != TOKEN_SEMI) error("Expected ';'");
 	advance();
 	return node;
 }
 
-ASTNode *parse_block()
+ASTNode *parse_block(void)
 {
-	// Ensure we are strictly looking at a '{'
-	if (current_token.type != TOKEN_LBRACE)
-		error("Syntax Error: Expected '{' at start of block");
-
-	advance();  // Consume '{'
+	if (current_token.type != TOKEN_LBRACE) error("Expected '{'");
+	advance();
 
 	ASTNode *block = create_node(NODE_BLOCK);
 	ASTNode *curr = NULL;
 
-	// Keep parsing statements untill we hit '}' or EOF
 	while (current_token.type != TOKEN_RBRACE && current_token.type != TOKEN_EOF) {
 		ASTNode *stmt = parse_statement();
-		if (!block->left) {
-			block->left = stmt; // Head of list
-			curr = stmt;
-		} else {
-			curr->next = stmt;  // Append to list
-			curr = stmt;
+		if (stmt) { // parse_struct_def returns NULL
+			if (!block->left) {
+				block->left = stmt;
+				curr = stmt;
+			} else {
+				curr->next = stmt;
+				curr = stmt;
+			}
 		}
 	}
 
-	if (current_token.type != TOKEN_RBRACE) {
-		error("Error: Expected '}'");
-	}
-	advance();  // Consume '}'
+	if (current_token.type != TOKEN_RBRACE) error("Expected '}'");
+	advance();
 	return block;
 }
 
-ASTNode *parse_function()
+ASTNode *parse_function(void)
 {
 	if (current_token.type != TOKEN_FN) return NULL;
-	advance();  // consume 'fn'
+	advance();
 
 	char *name = strdup(current_token.name);
-	advance();  // consume name
+	advance();
 
 	if (current_token.type != TOKEN_LPAREN) error("Expected '('");
-	advance();  // consume '('
+	advance();
 
-	// Parse Parameters (a: int, b: int)
 	ASTNode *first_param = NULL;
 	ASTNode *current_param = NULL;
 
 	while (current_token.type != TOKEN_RPAREN) {
 		if (current_token.type != TOKEN_IDENTIFIER) error("Expected parameter name");
-
-		// Capture Parameter Name
 		ASTNode *param = create_node(NODE_VAR_DECL);
 		param->var_name = strdup(current_token.name);
-		param->left = NULL; 
-		advance(); 
-
-		// Expect Colon
-		if (current_token.type != TOKEN_COLON) error("Expected ':' after parameter name");
+		param->left = NULL;
 		advance();
 
-		// Expect Type (int OR ptr OR char)
-		if (current_token.type != TOKEN_INT_TYPE &&
-			current_token.type != TOKEN_PTR_TYPE &&
-			current_token.type != TOKEN_CHAR_TYPE) {
-			error("Expected parameter type 'int' or 'ptr'");
-		}
+		if (current_token.type != TOKEN_COLON) error("Expected ':'");
 		advance();
 
-		// Link the parameter node
-		if (first_param == NULL) {
-			first_param = param;
-			current_param = param;
-		} else {
-			current_param->next = param;
-			current_param = param;
-		}
-
-		if (current_token.type == TOKEN_COMMA) {
+		// Parameter Types
+		// We use member_name to store the type string for params too
+		char *type = "int";
+		if (current_token.type == TOKEN_INT_TYPE) { type = "int"; advance(); }
+		else if (current_token.type == TOKEN_PTR_TYPE) { type = "ptr"; advance(); }
+		else if (current_token.type == TOKEN_CHAR_TYPE) { type = "char"; advance(); }
+		else if (current_token.type == TOKEN_IDENTIFIER && get_struct(current_token.name)) {
+			type = strdup(current_token.name);
 			advance();
-		} else if (current_token.type != TOKEN_RPAREN) {
-			error("Expected ',' or ')'");
+		} else {
+			error("Invalid parameter type");
 		}
+		param->member_name = strdup(type);
+
+		if (first_param == NULL) { first_param = param; current_param = param; }
+		else { current_param->next = param; current_param = param; }
+
+		if (current_token.type == TOKEN_COMMA) advance();
+		else if (current_token.type != TOKEN_RPAREN) error("Expected ',' or ')'");
 	}
 
-	advance(); // consume ')'
+	advance(); // ')'
 
-	// Parse Return Type (-> int)
 	if (current_token.type == TOKEN_ARROW) {
-		advance(); // consume '->'
-		if (current_token.type != TOKEN_INT_TYPE &&
-			current_token.type != TOKEN_PTR_TYPE &&
-			current_token.type != TOKEN_CHAR_TYPE) {
-			error("Expected return type 'int' or 'ptr'");
-		}
-		advance(); // consume 'int'
+		advance();
+		// Skip return type for now, we don't enforce it strictly
+		advance();
 	}
 
 	ASTNode *func = create_node(NODE_FUNCTION);
 	func->var_name = name;
-	func->left = first_param; 
+	func->left = first_param;
 	func->body = parse_block();
 
 	return func;
 }
 
-ASTNode *parse_syscall()
+ASTNode *parse_syscall(void)
 {
-	advance();  // Skip 'syscall'
-
-	if (current_token.type != TOKEN_LPAREN)
-		error("Error: Expected '(' after syscall");
-
-	advance();  // Skip '('
+	advance(); // syscall
+	if (current_token.type != TOKEN_LPAREN) error("Expected '('");
+	advance();
 
 	ASTNode *call_node = create_node(NODE_SYSCALL);
 	ASTNode *current_arg = NULL;
 
-	// Parse arguments (comma separated)
 	while (current_token.type != TOKEN_RPAREN) {
 		ASTNode *expr = parse_expression();
+		if (call_node->left == NULL) { call_node->left = expr; current_arg = expr; }
+		else { current_arg->next = expr; current_arg = expr; }
 
-		if (call_node->left == NULL) {
-			call_node->left = expr;     // First arg
-			current_arg = expr;
-		} else {
-			current_arg->next = expr;   // Chain subsequent args
-			current_arg = expr;
-		}
-
-		if (current_token.type == TOKEN_COMMA) {
-			advance();  // Skip ','
-		} else if (current_token.type != TOKEN_RPAREN) {
-			error("Error: Expected ',' or ')'");
-		}
+		if (current_token.type == TOKEN_COMMA) advance();
+		else if (current_token.type != TOKEN_RPAREN) error("Expected ',' or ')'");
 	}
-
-	advance(); // Skip ')'
+	advance();
 	return call_node;
 }
 
 void free_ast(ASTNode *node)
 {
 	if (node == NULL) return;
-
-	// Recursively free all children
 	free_ast(node->left);
 	free_ast(node->right);
-	free_ast(node->body); // For functions
-
-	// For blocks, we need to free the linked list of statements
-	free_ast(node->next); 
-
-	// Free the string if this node has one (var_name or func_name)
+	free_ast(node->body);
+	free_ast(node->next);
 	if (node->var_name) free(node->var_name);
-
-	// Finally, free the node container itself
+	if (node->member_name) free(node->member_name);
 	free(node);
 }
