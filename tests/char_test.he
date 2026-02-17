@@ -1,0 +1,16 @@
+// expect-out: Hi
+
+#include "lib/std.he"
+
+fn main()
+{
+	char buf[10];
+	buf[0] = 'H';
+	buf[1] = 'i';
+	buf[2] = '\n';
+	buf[3] = 0;
+
+	// Should print "Hi"
+	print(&buf);
+	exit(0);
+}

@@ -3,66 +3,66 @@
 #define O_RDONLY 0
 #define BUF_SIZE 1024
 
-fn main() {
-    print("Filename to read: ");
-    
-    int filename[32]; 
-    int len = read(0, &filename, 255);
-    
-    if len < 1 {
-        print("Error reading input.\n");
-        exit(1);
-    }
+fn main()
+{
+	print("Filename to read: ");
 
-    ptr p = &filename;
-    int i = 0;
-    
-    // Advance p to the last byte
-    int last_index = len - 1;
-    while i < last_index {
-        p++;
-        i++;
-    }
+	char filename[256];
+	int len = read(0, &filename, 255);
+	if len < 1 {
+		print("Error reading input.\n");
+		exit(1);
+	}
 
-    // Check if it's a newline (10) and kill it
-    if (*p & 255) == 10 {
-        *p = 0;
-    }
-    
-    // Safety: Ensure null termination even if no newline was found
-    // (This overwrites the newline if it was there, or the char after the filename if not)
-    ptr end = &filename;
-    i = 0;
-    while i < len {
-         // Find the newline or end manually to be safe
-         if (*end & 255) == 10 {
-             *end = 0;
-             i = len; // Break
-         }
-         end++;
-         i++;
-    }
+	ptr p = &filename;
+	int i = 0;
+	
+	// Advance p to the last byte
+	int last_index = len - 1;
+	while i < last_index {
+		p++;
+		i++;
+	}
 
-    // Open
-    int fd = open(&filename, O_RDONLY, 0);
-    
-    if fd < 0 {
-        print("Error: Could not open file '");
-        print(&filename);
-        print("'\n");
-        exit(1);
-    }
+	// Check if it's a newline (10) and kill it
+	if *p == 10 {
+		*p = 0;
+	}
+	
+	// Safety: Ensure null termination even if no newline was found
+	// (This overwrites the newline if it was there, or the char after the filename if not)
+	ptr end = &filename;
+	i = 0;
+	while i < len {
+		 // Find the newline or end manually to be safe
+		 if *end == 10 {
+			 *end = 0;
+			 i = len; // Break
+		 }
+		 end++;
+		 i++;
+	}
 
-    // Stream
-    int buffer[128];
-    int n = 1;
-    while n > 0 {
-        n = read(fd, &buffer, BUF_SIZE);
-        if n > 0 {
-            write(1, &buffer, n);
-        }
-    }
+	// Open
+	int fd = open(&filename, O_RDONLY, 0);
+	if fd < 0 {
+		print("Error: Could not open file '");
+		print(&filename);
+		print("'\n");
+		exit(1);
+	}
 
-    close(fd);
-    exit(0);
+	// Stream
+	char buffer[BUF_SIZE];
+	int n = 1;
+
+	while n > 0 {
+		n = read(fd, &buffer, BUF_SIZE);
+		if n > 0 {
+			write(1, &buffer, n);
+		}
+	}
+
+	close(fd);
+	exit(0);
 }

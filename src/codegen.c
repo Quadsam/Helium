@@ -101,8 +101,9 @@ void gen_asm(ASTNode *node) {
 				// but for now, passing structs by value isn't fully supported.
 				// We treat struct vars as their base address for member access.
 				printf("  lea rax, [rbp + %d]\n", sym->offset);
+			} else if (strcmp(sym->type_name, "char") == 0) {
+				printf("  movzx rax, byte [rbp + %d]\n", sym->offset);
 			} else {
-				// Primitive: Push value
 				printf("  mov rax, [rbp + %d]\n", sym->offset);
 			}
 			printf("  push rax\n");
@@ -115,6 +116,8 @@ void gen_asm(ASTNode *node) {
 			if (type == NULL) type = "int"; // Default safety
 
 			int size = 8;
+			if (strcmp(type, "char") == 0) size = 1;
+
 			StructDef *sdef = get_struct(type);
 			if (sdef) {
 				size = sdef->size;
@@ -266,16 +269,26 @@ void gen_asm(ASTNode *node) {
 				gen_asm(node->left->left); // Push Index
 
 				int offset = get_offset(node->left->var_name);
+
+				// Check array type for scaling
+				Symbol *sym = get_symbol(node->left->var_name);
+				int is_char_arr = (strncmp(sym->type_name, "char", 4) == 0);
+				int scale = is_char_arr ? 1 : 8;
+
 				printf("  pop rbx\n");        // Index
 				printf("  pop rax\n");        // Value
 
 				// Calc Address: rbp + offset + (index * 8)
 				printf("  mov rcx, %d\n", offset);
-				printf("  imul rbx, 8\n");
+				printf("  imul rbx, %d\n", scale);
 				printf("  add rcx, rbx\n");
 				printf("  add rcx, rbp\n");
 
-				printf("  mov [rcx], rax\n"); // Store
+				// Store based on type
+				if (is_char_arr)
+					printf("  mov [rcx], al\n");
+				else
+					printf("  mov [rcx], rax\n");
 			}
 			// STANDARD VARIABLE ASSIGNMENT (x = val)
 			else {
@@ -285,7 +298,13 @@ void gen_asm(ASTNode *node) {
 				}
 				gen_asm(node->right);
 				printf("  pop rax\n");
-				printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
+
+				// Check type for store
+				Symbol *sym = get_symbol(node->var_name);
+				if (strcmp(sym->type_name, "char") == 0)
+					printf("  mov [rbp + %d], al\n", sym->offset);
+				else
+					printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
 			}
 			break;
 
@@ -482,8 +501,17 @@ void gen_asm(ASTNode *node) {
 
 		case NODE_ARRAY_DECL: {
 			int size = node->int_value;
-			int total_size = size * 8;
-			add_symbol(node->var_name, "int[]", total_size);
+
+			// Calculate size based on type
+			char *type = node->member_name ? node->member_name : "int";
+			int elem_size = (strcmp(type, "char") == 0) ? 1 : 8;
+			int total_size = size * elem_size;
+
+			// Store type as "char[]" or "int[]" for symbol table
+			char type_sig[64];
+			snprintf(type_sig, 64, "%s[]", type);
+
+			add_symbol(node->var_name, type_sig, total_size);
 			break;
 		}
 
@@ -491,13 +519,24 @@ void gen_asm(ASTNode *node) {
 			gen_asm(node->left); // Push Index
 
 			int offset = get_offset(node->var_name);
+
+			// Determine scale
+			Symbol *sym = get_symbol(node->var_name);
+			int is_char_arr = (strncmp(sym->type_name, "char", 4) == 0);
+			int scale = is_char_arr ? 1 : 8;
+
 			printf("  pop rbx\n"); // Index
 			printf("  mov rax, %d\n", offset);
-			printf("  imul rbx, 8\n");
+			printf("  imul rbx, %d\n", scale);
 			printf("  add rax, rbx\n");
 			printf("  add rax, rbp\n");
 
-			printf("  mov rax, [rax]\n"); // Dereference
+			// Dereference based on size
+			if (is_char_arr)
+				printf("  movzx rax, byte [rax]\n");
+			else
+				printf("  mov rax, [rax]\n");
+
 			printf("  push rax\n");
 			break;
 		}
@@ -530,5 +569,9 @@ void gen_asm(ASTNode *node) {
 			printf("  push rax\n");
 			break;
 		}
+
+		// Struct definitions are handled entireley by the parser. They do not
+		// generate any assembly code.
+		case NODE_STRUCT_DEFN: break;
 	}
 }

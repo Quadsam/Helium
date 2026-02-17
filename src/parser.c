@@ -341,10 +341,16 @@ ASTNode *parse_struct_definition(void)
 
 		// Parse Type (int, ptr, char)
 		int mem_size = 8; // Default 8 bytes
+
+		if (current_token.type == TOKEN_CHAR_TYPE) {
+			mem_size = 1;
+			advance();
+		}
+
 		// In the future we can support nested structs here
+
 		if (current_token.type == TOKEN_INT_TYPE ||
-			current_token.type == TOKEN_PTR_TYPE ||
-			current_token.type == TOKEN_CHAR_TYPE) {
+			current_token.type == TOKEN_PTR_TYPE) {
 			advance();
 		} else {
 			error("Unknown member type");
@@ -414,6 +420,8 @@ ASTNode *parse_var_declaration(void)
 		ASTNode *node = create_node(NODE_ARRAY_DECL);
 		node->var_name = name;
 		node->int_value = size;
+
+		node->member_name = type_name ? strdup(type_name) : strdup("int");
 		return node;
 	}
 
