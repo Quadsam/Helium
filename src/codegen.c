@@ -369,10 +369,22 @@ void gen_asm(ASTNode *node) {
 			symbol_count = 0;
 			current_stack_offset = 0;
 
-			// CHECK FOR MAIN -> _start
+			// Handle 'main' by generating a separate _start wrapper
 			if (strcmp(node->var_name, "main") == 0) {
 				printf("global _start\n");
 				printf("_start:\n");
+				// Load argc (at [rsp]) into RDI
+				printf("  mov rdi, [rsp]\n");
+				// Load argv (address at [rsp + 8]) into RSI
+				printf("  lea rsi, [rsp + 8]\n");
+				printf("  call main\n");
+				// Exit with return value
+				printf("  mov rdi, rax\n");
+				printf("  mov rax, 60\n"); // SYS_exit
+				printf("  syscall\n");
+
+				// Generate the actual main label below
+				printf("main:\n");
 			} else {
 				printf("global %s\n", node->var_name);
 				printf("%s:\n", node->var_name);

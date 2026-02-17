@@ -1,0 +1,28 @@
+#include "lib/std.he"
+
+fn main(argc: int, argv: ptr) -> int
+{
+	print("Argument Count: ");
+	print_int(argc);
+	print("\n");
+
+	int i = 0;
+	ptr current_arg_ptr = argv;
+
+	while i < argc {
+		print("Arg ");
+		print_int(i);
+		print(": ");
+		
+		// argv is a pointer to a pointer (char**)
+		// Dereference it to get the char* string
+		ptr arg_str = *current_arg_ptr;
+		print(arg_str);
+		print("\n");
+
+		// Move to next argument (pointer size is 8 bytes)
+		current_arg_ptr = current_arg_ptr + 8;
+		i++;
+	}
+	return 0;
+}
