@@ -28,7 +28,7 @@ fn print(str: ptr) -> int
 }
 
 // Print a single character
-fn print_char(c: int) -> int
+fn print_char(c: char) -> int
 {
 	write(1, &c, 1);
 	return 0;
