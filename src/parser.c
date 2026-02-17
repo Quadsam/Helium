@@ -10,8 +10,11 @@ ASTNode *create_node(NodeType type)
 	ASTNode *node = malloc(sizeof(ASTNode));
 	node->type = type;
 	node->left = node->right = node->body = node->next = NULL;
+	node->int_value = 0;
 	node->var_name = NULL;
 	node->member_name = NULL; // Initialize new field
+	node->line = current_token.line;
+	node->column = current_token.column;
 	return node;
 }
 

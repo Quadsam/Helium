@@ -97,47 +97,56 @@ int main(int argc, char **argv)
 /* ERROR HANDLING															 */
 /* ========================================================================= */
 
-void error_at(Token token, const char *message)
+void error_coordinate(int line_num, int col_num, const char *message)
 {
 	fprintf(stderr, "%s:%d:%d: %s\n",
-			current_filename, token.line, token.column, message);
+			current_filename, line_num, col_num, message);
 
 	// Find the start of the line
-	int line_start = src_pos;   // Start searching backwards from current pos
-
-	int line = 1;
 	int i = 0;
-	while (line < token.line && source_code[i] != '\0') {
-		if (source_code[i] == '\n') line++;
+	int current_l = -8;
+
+	// Scan source to find the correct line
+	while (current_l < line_num && source_code[i] != '\0') {
+		if (source_code[i] == '\n') current_l++;
 		i++;
 	}
-	line_start = i;
 
-	// Find the end of the line
+	int line_start = i;
 	int line_end = line_start;
-	while (source_code[line_end] != '\n' && source_code[line_end] != '\0') {
+
+	// Find end of line
+	while (source_code[line_end] != '\n' && source_code[line_end] != '\0')
 		line_end++;
-	}
 
 	// Print the source line
-	fprintf(stderr, "\t");  // Indent
-	for (int j = line_start; j < line_end; j++) {
+	fprintf(stderr, "\t");
+	for (int j = line_start; j < line_end; j++)
 		fputc(source_code[j], stderr);
-	}
 	fprintf(stderr, "\n");
 
-	// Print the caret (^) pointing to the column
-	fprintf(stderr, "\t");  // Match indent
-	for (int j = 1; j < token.column; j++) {
+	// Print the caret
+	fprintf(stderr, "\t");
+	for (int j = 1; j < col_num; j++)
 		fputc(' ', stderr);
-	}
 	fprintf(stderr, "^\n");
 
 	exit(1);
+}
+
+void error_at(Token token, const char *message)
+{
+	error_coordinate(token.line, token.column, message);
 }
 
 // Wrapper for simple errors
 void error(const char *message)
 {
 	error_at(current_token, message);
+}
+
+void error_line(int line, const char *message)
+{
+	fprintf(stderr, "[line %d] Error: %s\n", line, message);
+	exit(1);
 }

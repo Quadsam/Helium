@@ -88,14 +88,16 @@ typedef enum {
 
 typedef struct ASTNode {
 	NodeType type;
-	int int_value;          // For literals
-	char *var_name;         // For references/declarations
+	int int_value;			// For literals
+	char *var_name;			// For references/declarations
 	char *member_name;		// For p.x, this stores "x"
-	char op;                // For binary ops
-	struct ASTNode *left;   // Left child
-	struct ASTNode *right;  // Right child
-	struct ASTNode *body;   // For functions
-	struct ASTNode *next;   // For linked lists in blocks
+	char op;				// For binary ops
+	struct ASTNode *left;	// Left child
+	struct ASTNode *right;	// Right child
+	struct ASTNode *body;	// For functions
+	struct ASTNode *next;	// For linked lists in blocks
+	int line;				// For error handling
+	int column;				// For error handling
 } ASTNode;
 
 
@@ -155,5 +157,7 @@ char *preprocess_file(const char *filename);
 // Utils
 void error(const char *message);
 void error_at(Token token, const char *message);
+void error_line(int line, const char *message);
+void error_coordinate(int line, int col, const char *message);
 
 #endif /* HELIUM_H */

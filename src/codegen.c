@@ -28,9 +28,6 @@ StructDef *get_struct(const char *name)
 	return NULL;
 }
 
-
-
-
 /* ========================================================================= */
 /* CODE GENERATOR															 */
 /* ========================================================================= */
@@ -46,21 +43,25 @@ Symbol symbols[100];
 int symbol_count = 0;
 int current_stack_offset = 0;
 
-Symbol *get_symbol(char *name)
+Symbol *get_symbol(char *name, int line, int col)
 {
 	for (int i = 0; i < symbol_count; i++) {
 		if (strcmp(symbols[i].name, name) == 0) {
 			return &symbols[i];
 		}
 	}
-	error("Undefined variable");
+
+	char buffer[256];
+	snprintf(buffer, sizeof(buffer), "Undefined variable '%s'", name);
+	error_coordinate(line, col, buffer);
+
 	exit(1);
 }
 
 // Wrapper for old calls that just want the offset
 int get_offset(char *name)
 {
-	return get_symbol(name)->offset;
+	return get_symbol(name, 0, 0)->offset;
 }
 
 void add_symbol(char *name, char *type_name, int size)
@@ -90,7 +91,7 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_VAR_REF: {
-			Symbol *sym = get_symbol(node->var_name);
+			Symbol *sym = get_symbol(node->var_name, node->line, node->column);
 
 			// If it's a STRUCT, we push its address (like an array)
 			// If it's an INT/PTR, we push its value
@@ -160,7 +161,7 @@ void gen_asm(ASTNode *node) {
 			}
 
 			// 1. Find variable 'p'
-			Symbol *sym = get_symbol(node->left->var_name);
+			Symbol *sym = get_symbol(node->left->var_name, node->line, node->column);
 
 			// 2. Find struct definition 'Point'
 			StructDef *sdef = get_struct(sym->type_name);
@@ -202,7 +203,7 @@ void gen_asm(ASTNode *node) {
 			// &p.x
 			if (node->left->type == NODE_MEMBER_ACCESS) {
 				ASTNode *access = node->left;
-				Symbol *sym = get_symbol(access->left->var_name);
+				Symbol *sym = get_symbol(access->left->var_name, node->line, node->column);
 				StructDef *sdef = get_struct(sym->type_name);
 
 				int mem_offset = 0;
@@ -239,7 +240,7 @@ void gen_asm(ASTNode *node) {
 				gen_asm(node->right); // Push Value
 
 				ASTNode *access = node->left;
-				Symbol *sym = get_symbol(access->left->var_name);
+				Symbol *sym = get_symbol(access->left->var_name, node->line, node->column);
 				StructDef *sdef = get_struct(sym->type_name);
 
 				int mem_offset = 0;
@@ -271,7 +272,7 @@ void gen_asm(ASTNode *node) {
 				int offset = get_offset(node->left->var_name);
 
 				// Check array type for scaling
-				Symbol *sym = get_symbol(node->left->var_name);
+				Symbol *sym = get_symbol(node->left->var_name, node->line, node->column);
 				int is_char_arr = (strncmp(sym->type_name, "char", 4) == 0);
 				int scale = is_char_arr ? 1 : 8;
 
@@ -300,7 +301,7 @@ void gen_asm(ASTNode *node) {
 				printf("  pop rax\n");
 
 				// Check type for store
-				Symbol *sym = get_symbol(node->var_name);
+				Symbol *sym = get_symbol(node->var_name, node->line, node->column);
 				if (strcmp(sym->type_name, "char") == 0)
 					printf("  mov [rbp + %d], al\n", sym->offset);
 				else
@@ -521,7 +522,7 @@ void gen_asm(ASTNode *node) {
 			int offset = get_offset(node->var_name);
 
 			// Determine scale
-			Symbol *sym = get_symbol(node->var_name);
+			Symbol *sym = get_symbol(node->var_name, node->line, node->column);
 			int is_char_arr = (strncmp(sym->type_name, "char", 4) == 0);
 			int scale = is_char_arr ? 1 : 8;
 
