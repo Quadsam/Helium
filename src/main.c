@@ -72,6 +72,7 @@ int main(int argc, char **argv)
 	while (current_token.type != TOKEN_EOF) {
 		if (current_token.type == TOKEN_FN) {
 			ASTNode* func = parse_function();
+			optimize_ast(func);
 			gen_asm(func);
 			free_ast(func);    // Free each function after generating code
 		} else if (current_token.type == TOKEN_STRUCT) {
@@ -97,56 +98,47 @@ int main(int argc, char **argv)
 /* ERROR HANDLING															 */
 /* ========================================================================= */
 
-void error_coordinate(int line_num, int col_num, const char *message)
+void error_at_pos(int line_num, int col_num, int offset, const char *fmt, ...)
 {
-	fprintf(stderr, "%s:%d:%d: %s\n",
-			current_filename, line_num, col_num, message);
+	// Print Header: "file:line:col: "
+	fprintf(stderr, "%s:%d:%d: \n", current_filename, line_num, col_num);
 
-	// Find the start of the line
-	int i = 0;
-	int current_l = -8;
+	// Print the formatted message
+	va_list args;
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
 
-	// Scan source to find the correct line
-	while (current_l < line_num && source_code[i] != '\0') {
-		if (source_code[i] == '\n') current_l++;
-		i++;
-	}
+	fprintf(stderr, "\n");
 
-	int line_start = i;
-	int line_end = line_start;
+	// Scan backwards from offset to find start of line
+	int line_start = offset;
+	while (line_start > 0 && source_code[line_start - 1] != '\n')
+		line_start--;
 
-	// Find end of line
-	while (source_code[line_end] != '\n' && source_code[line_end] != '\0')
+	// Scan forwards from offset to find end of line
+	int line_end = offset;
+	while (source_code[line_end] != '\0' && source_code[line_end] != '\n')
 		line_end++;
 
-	// Print the source line
+	// Print the Source Line
 	fprintf(stderr, "\t");
 	for (int j = line_start; j < line_end; j++)
 		fputc(source_code[j], stderr);
 	fprintf(stderr, "\n");
 
-	// Print the caret
+	// Print the Caret
+	// Calculate actual column distance based on offset
+	int caret_col = offset - line_start; 
+	
 	fprintf(stderr, "\t");
-	for (int j = 1; j < col_num; j++)
+	for (int j = 0; j < caret_col; j++)
 		fputc(' ', stderr);
 	fprintf(stderr, "^\n");
 
 	exit(1);
 }
 
-void error_at(Token token, const char *message)
-{
-	error_coordinate(token.line, token.column, message);
-}
-
-// Wrapper for simple errors
-void error(const char *message)
-{
-	error_at(current_token, message);
-}
-
-void error_line(int line, const char *message)
-{
-	fprintf(stderr, "[line %d] Error: %s\n", line, message);
-	exit(1);
+void error_at(Token token, const char *message) {
+	error_at_pos(token.line, token.column, token.offset, "%s", message);
 }

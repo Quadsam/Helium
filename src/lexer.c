@@ -59,9 +59,10 @@ Token get_next_token(void)
 	// Capture the start location of this token
 	int start_line = current_line;
 	int start_col = current_col;
+	int start_offset = src_pos;
 
 	if (source_code[src_pos] == '\0') {
-		return (Token){"EOF", TOKEN_EOF, 0, start_line, start_col};
+		return (Token){"EOF", TOKEN_EOF, 0, start_line, start_col, start_offset};
 	}
 
 	char current = source_code[src_pos];
@@ -71,6 +72,7 @@ Token get_next_token(void)
 		Token t;
 		t.line = start_line;
 		t.column = start_col;
+		t.offset = start_offset;
 
 		char buffer[256];
 		int i = 0;
@@ -103,6 +105,7 @@ Token get_next_token(void)
 			Token subst = *macro;
 			subst.line = start_line;
 			subst.column = start_col;
+			subst.offset = start_offset;
 
 			if (subst.type == TOKEN_IDENTIFIER || subst.type == TOKEN_STRING) {
 				subst.name = strdup(subst.name);
@@ -124,6 +127,7 @@ Token get_next_token(void)
 		t.line = start_line;
 		t.column = start_col;
 		t.value = 0;
+		t.offset = start_offset;
 		while (isdigit(source_code[src_pos])) {
 			t.value = t.value * 10 + (source_code[src_pos++] - '0');
 			current_col++;
@@ -137,19 +141,19 @@ Token get_next_token(void)
 
 	switch (current) {
 		// Single char tokens
-		case '(': src_pos++; current_col++; return (Token){"(", TOKEN_LPAREN, 0, start_line, start_col};
-		case ')': src_pos++; current_col++; return (Token){")", TOKEN_RPAREN, 0, start_line, start_col};
-		case '{': src_pos++; current_col++; return (Token){"{", TOKEN_LBRACE, 0, start_line, start_col};
-		case '}': src_pos++; current_col++; return (Token){"}", TOKEN_RBRACE, 0, start_line, start_col};
-		case '[': src_pos++; current_col++; return (Token){"[", TOKEN_LBRACKET, 0, start_line, start_col};
-		case ']': src_pos++; current_col++; return (Token){"]", TOKEN_RBRACKET, 0, start_line, start_col};
-		case ',': src_pos++; current_col++; return (Token){",", TOKEN_COMMA, 0, start_line, start_col};
-		case ';': src_pos++; current_col++; return (Token){";", TOKEN_SEMI, 0, start_line, start_col};
-		case ':': src_pos++; current_col++; return (Token){":", TOKEN_COLON, 0, start_line, start_col};
-		case '.': src_pos++; current_col++;	return (Token){".", TOKEN_PERIOD, 0, start_line, start_col};
-		case '*': src_pos++; current_col++; return (Token){"*", TOKEN_STAR, 0, start_line, start_col};
-		case '|': src_pos++; current_col++; return (Token){"|", TOKEN_PIPE, 0, start_line, start_col};
-		case '&': src_pos++; current_col++; return (Token){"&", TOKEN_AMP, 0, start_line, start_col};
+		case '(': src_pos++; current_col++; return (Token){"(", TOKEN_LPAREN, 0, start_line, start_col, start_offset};
+		case ')': src_pos++; current_col++; return (Token){")", TOKEN_RPAREN, 0, start_line, start_col, start_offset};
+		case '{': src_pos++; current_col++; return (Token){"{", TOKEN_LBRACE, 0, start_line, start_col, start_offset};
+		case '}': src_pos++; current_col++; return (Token){"}", TOKEN_RBRACE, 0, start_line, start_col, start_offset};
+		case '[': src_pos++; current_col++; return (Token){"[", TOKEN_LBRACKET, 0, start_line, start_col, start_offset};
+		case ']': src_pos++; current_col++; return (Token){"]", TOKEN_RBRACKET, 0, start_line, start_col, start_offset};
+		case ',': src_pos++; current_col++; return (Token){",", TOKEN_COMMA, 0, start_line, start_col, start_offset};
+		case ';': src_pos++; current_col++; return (Token){";", TOKEN_SEMI, 0, start_line, start_col, start_offset};
+		case ':': src_pos++; current_col++; return (Token){":", TOKEN_COLON, 0, start_line, start_col, start_offset};
+		case '.': src_pos++; current_col++;	return (Token){".", TOKEN_PERIOD, 0, start_line, start_col, start_offset};
+		case '*': src_pos++; current_col++; return (Token){"*", TOKEN_STAR, 0, start_line, start_col, start_offset};
+		case '|': src_pos++; current_col++; return (Token){"|", TOKEN_PIPE, 0, start_line, start_col, start_offset};
+		case '&': src_pos++; current_col++; return (Token){"&", TOKEN_AMP, 0, start_line, start_col, start_offset};
 		// Division or Comment
 		case '/': 
 			if (source_code[src_pos + 1] == '/') {
@@ -163,39 +167,39 @@ Token get_next_token(void)
 				return get_next_token();    // Recursion to find real token
 			}
 			src_pos++; current_col++; 
-			return (Token){"/", TOKEN_SLASH, 0, start_line, start_col};
+			return (Token){"/", TOKEN_SLASH, 0, start_line, start_col, start_offset};
 		case '-': 
 			if (source_code[src_pos+1] == '>') {
 				src_pos+=2; current_col+=2; 
-				return (Token){"->", TOKEN_ARROW, 0, start_line, start_col};
+				return (Token){"->", TOKEN_ARROW, 0, start_line, start_col, start_offset};
 			}
 			src_pos++; current_col++; 
-			return (Token){"-", TOKEN_MINUS, 0, start_line, start_col};
+			return (Token){"-", TOKEN_MINUS, 0, start_line, start_col, start_offset};
 		case '+': 
 			if (source_code[src_pos+1] == '+') {
 				src_pos+=2; current_col+=2; 
-				return (Token){"++", TOKEN_INC, 0, start_line, start_col};
+				return (Token){"++", TOKEN_INC, 0, start_line, start_col, start_offset};
 			}
 			src_pos++; current_col++;
-			return (Token){"+", TOKEN_PLUS, 0, start_line, start_col};
+			return (Token){"+", TOKEN_PLUS, 0, start_line, start_col, start_offset};
 
 		case '=':
 			if (source_code[src_pos+1] == '=') {
 				src_pos+=2; current_col+=2; 
-				return (Token){"==", TOKEN_EQ, 0, start_line, start_col};
+				return (Token){"==", TOKEN_EQ, 0, start_line, start_col, start_offset};
 			}
 			src_pos++; current_col++;
-			return (Token){"=", TOKEN_ASSIGN, 0, start_line, start_col};
+			return (Token){"=", TOKEN_ASSIGN, 0, start_line, start_col, start_offset};
 
 		case '!':
 			if (source_code[src_pos+1] == '=') {
 				src_pos+=2; current_col+=2; 
-				return (Token){"!=", TOKEN_NEQ, 0, start_line, start_col};
+				return (Token){"!=", TOKEN_NEQ, 0, start_line, start_col, start_offset};
 			}
-			error_at((Token){"", 0, 0, start_line, start_col}, "Expected '!='");
+			error_at((Token){"", 0, 0, start_line, start_col, start_offset}, "Expected '!='");
 			exit(1);
-		case '<': src_pos++; current_col++; return (Token){"<", TOKEN_LT, 0, start_line, start_col};
-		case '>': src_pos++; current_col++; return (Token){">", TOKEN_GT, 0, start_line, start_col};
+		case '<': src_pos++; current_col++; return (Token){"<", TOKEN_LT, 0, start_line, start_col, start_offset};
+		case '>': src_pos++; current_col++; return (Token){">", TOKEN_GT, 0, start_line, start_col, start_offset};
 		case '"': {
 			Token t;
 			t.type = TOKEN_STRING;
@@ -348,7 +352,7 @@ Token get_next_token(void)
 		}
 
 		default: 
-			error_at((Token){"", 0, 0, start_line, start_col}, "Unknown character");
+			error_at((Token){"", 0, 0, start_line, start_col, start_offset}, "Unknown character");
 			exit(1);
 	}
 }

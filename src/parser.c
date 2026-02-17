@@ -15,6 +15,7 @@ ASTNode *create_node(NodeType type)
 	node->member_name = NULL; // Initialize new field
 	node->line = current_token.line;
 	node->column = current_token.column;
+	node->offset = current_token.offset;
 	return node;
 }
 
@@ -608,4 +609,43 @@ void free_ast(ASTNode *node)
 	if (node->var_name) free(node->var_name);
 	if (node->member_name) free(node->member_name);
 	free(node);
+}
+
+void optimize_ast(ASTNode *node)
+{
+	if (!node) return;
+	// Optimize Children First (Bottom-Up)
+	optimize_ast(node->left);
+	optimize_ast(node->right);
+	optimize_ast(node->body);
+	optimize_ast(node->next);
+
+	// Constant Folding: BinOp(Int, Int) -> Int
+	if (node->type == NODE_BINOP) {
+		if (node->left && node->left->type == NODE_INT &&
+			node->right && node->right->type == NODE_INT) {
+			
+			int v1 = node->left->int_value;
+			int v2 = node->right->int_value;
+			int res = 0;
+
+			switch (node->op) {
+				case '+': res = v1 + v2; break;
+				case '-': res = v1 - v2; break;
+				case '*': res = v1 * v2; break;
+				case '/': if (v2 != 0) res = v1 / v2; break;
+				// Add other ops as needed
+			}
+
+			// Transform this node into a literal INT
+			node->type = NODE_INT;
+			node->int_value = res;
+
+			// Free the dead children
+			free(node->left);
+			free(node->right);
+			node->left = NULL;
+			node->right = NULL;
+		}
+	}
 }
