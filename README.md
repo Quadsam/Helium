@@ -23,7 +23,7 @@ It is designed to be simple, transparent, and capable of generating bare-metal L
 You need **GCC** (to build the compiler), **NASM** (to assemble the output), and **LD** (to link the binary).
 
 ```bash
-sudo apt install build-essential nasm
+sudo pacman -S --needed gcc nasm
 ```
 
 ### 2. Build the Compiler
@@ -46,7 +46,7 @@ Create a file named `main.he`:
 fn main()
 {
     print("Hello from Helium!\n");
-    exit(0);
+    return 0;
 }
 ```
 
@@ -57,10 +57,10 @@ Compile and run it:
 ./helium -o main.s main.he
 
 # 2. Assemble to Object File
-nasm -f elf64 main.s -o main.o
+nasm -felf64 -o main.o main.s
 
 # 3. Link to Executable
-ld main.o -o main
+ld -o main main.o
 
 # 4. Run
 ./main
@@ -108,7 +108,7 @@ fn add(a: int, b: int) -> int
 fn main()
 {
     int sum = add(10, 20);
-    exit(sum);
+    return sum;
 }
 
 ```
@@ -127,7 +127,6 @@ if x > 10 {
 while i < 10 {
     i++;
 }
-
 ```
 
 ### System Calls
@@ -135,10 +134,9 @@ while i < 10 {
 You can invoke Linux syscalls directly.
 
 ```c
-// syscall(number, arg1, arg2, arg3...)
+// syscall(number, arg1, arg2, arg3, ...)
 syscall(1, 1, "Raw Write\n", 10); // Syscall 1 = WRITE
 syscall(60, 0);                   // Syscall 60 = EXIT
-
 ```
 
 ---
@@ -159,13 +157,13 @@ The compiler comes with a lightweight standard library that wraps common syscall
 
 - [X] **`char` Type (1-byte support):** Right now, ptr math assumes everything is 1 byte, but variables are 8 bytes. Adding a distinct char type would make string manipulation significantly safer and easier than manually masking & 255.
 - [X] **Command Line Arguments:** Impliment `argv` and `argc`
-- [ ] **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
 - [X] **Simple Heap Allocation:** Impliment malloc/free.
+- [X] **Structs & Nested structs**
+- [ ] **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
 - [ ] **Implicit Bounds Checking**
 - [ ] **Detailed error messages**
 - [ ] **`for` loops**
 - [ ] **Optimization passes on generated assembly**
-- [ ] **~~Structs~~ & Nested structs**
 - [ ] **Debug info**
 
 ---
