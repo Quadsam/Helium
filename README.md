@@ -32,7 +32,8 @@ Clone the repository and build the `helium` executable:
 
 ```bash
 git clone https://github.com/Quadsam/Helium
-gcc compiler.c -o helium && ./test.py
+make
+make test
 ```
 
 ### 3. Compile "Hello World"
