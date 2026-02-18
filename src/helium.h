@@ -101,6 +101,7 @@ typedef struct ASTNode {
 	int line;               // For error handling
 	int column;             // For error handling
 	int offset;             // For error handling
+	int is_reachable;		// Tracks reachability
 } ASTNode;
 
 
@@ -149,6 +150,7 @@ ASTNode *parse_function(void);
 ASTNode *parse_struct_definition(void);
 void free_ast(ASTNode *node);
 void optimize_ast(ASTNode *node);
+void analyze_reachability(ASTNode *all_funcs);
 
 // Codegen
 void gen_asm(ASTNode *node);

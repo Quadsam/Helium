@@ -1,0 +1,49 @@
+#include "lib/std.he"
+
+fn main()
+{
+	print("=== Malloc Test ===\n");
+
+	// Allocate 16 bytes (enough for 2 ints)
+	print("Allocating 16 bytes...\n");
+	ptr p = malloc(16);
+
+	if p == 0 {
+		print("Error: malloc failed\n");
+		return 1;
+	}
+
+	print("Got memory at: ");
+	print_int(p);
+	print("\n");
+
+	// Write data (simulating struct Point {x: int, y: int })
+	// p->x = 42
+	*p = 42;
+
+	// p->y = 100 (offset 8 bytes)
+	ptr py = p + 8;
+	*py = 100;
+
+	// Read data back
+	int val_x = *p;
+	int val_y = *py;
+
+	print("Values: x=");
+	print_int(val_x);
+	print(", y=");
+	print_int(val_y);
+	print("\n");
+
+	if (val_x != 42) | (val_y != 100) {
+		print("Error: Data mismatch!\n");
+		exit(1);
+	}
+
+	// 4. Free
+	print("Freeing memory...\n");
+	free(p);
+
+	print("Success.\n");
+	return 0;
+}

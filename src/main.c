@@ -68,27 +68,61 @@ int main(int argc, char **argv)
 	// Write the assembly header (required for linking)
 	printf("section .text\n");
 
+	// List to hold all functions
+	ASTNode *func_list_head = NULL;
+	ASTNode *func_list_tail = NULL;
+
 	// Keep parsing until end of file
 	while (current_token.type != TOKEN_EOF) {
 		if (current_token.type == TOKEN_FN) {
 			ASTNode* func = parse_function();
 			optimize_ast(func);
-			gen_asm(func);
-			free_ast(func);    // Free each function after generating code
+			
+			// Initialize reachable flag
+			func->is_reachable = 0; 
+			
+			// Store in linked list instead of generating immediately
+			if (!func_list_head) {
+				func_list_head = func;
+				func_list_tail = func;
+			} else {
+				func_list_tail->next = func;
+				func_list_tail = func;
+			}
+			
 		} else if (current_token.type == TOKEN_STRUCT) {
 			parse_struct_definition();
 		} else {
-			// Skip imports/macros
 			advance();
 		}
+	}
+
+	// Dead Code Elimination
+	analyze_reachability(func_list_head);
+
+	// Code Generation
+	ASTNode *curr = func_list_head;
+	while (curr) {
+		// Only generate if used!
+		if (curr->is_reachable) {
+			gen_asm(curr);
+		}
+		
+		// Cleanup
+		ASTNode *next = curr->next;
+		
+		// Detach 'next' so free_ast doesn't delete the whole list recursively
+		curr->next = NULL; 
+		free_ast(curr);
+		
+		curr = next;
 	}
 
 	// Cleanup
 	fclose(stdout); 
 	free(source_code);
-
-	if (filename_allocated) free(current_filename);
-
+	if (filename_allocated)
+		free(current_filename);
 	free_macros();
 
 	return 0;
@@ -141,4 +175,9 @@ void error_at_pos(int line_num, int col_num, int offset, const char *fmt, ...)
 
 void error_at(Token token, const char *message) {
 	error_at_pos(token.line, token.column, token.offset, "%s", message);
+}
+
+void error(const char *message)
+{
+	error_at(current_token, message);
 }

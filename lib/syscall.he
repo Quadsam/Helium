@@ -116,21 +116,6 @@ fn wait4(pid: int, status: ptr, options: int, rusage: ptr) -> int
 	return syscall(SYS_wait4, pid, status, options, rusage);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // Delete a name and possibly the file it refers to
 #define SYS_unlink 87
 fn unlink(pathname: ptr) -> int

@@ -1,0 +1,67 @@
+#include "lib/std.he"
+
+#define O_WRONLY 1
+#define O_RDWR   2
+#define O_CREAT  64
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
+fn main()
+{
+    print("=== File Operations Test ===\n");
+
+    // 1. mkdir
+    print("1. Creating directory 'testdir'...\n");
+    // Mode 511 is 0777 in octal (rwxrwxrwx)
+    if mkdir("testdir", 511) < 0 {
+        print("   (Note: mkdir might fail if it already exists, continuing)\n");
+    }
+
+    // 2. create and write
+    print("2. Creating 'testdir/file_a.txt'...\n");
+    int fd = open("testdir/file_a.txt", O_CREAT | O_RDWR, 420); // 0655 octal
+    if fd < 0 {
+        print("Error: Could not open file\n");
+        return 1;
+    }
+    write(fd, "Hello World", 11);
+
+    // 3. lseek
+    print("3. Testing lseek...\n");
+    // Move back to start
+    lseek(fd, 0, SEEK_SET);
+    
+    char buf[12];
+    // Read first 5 bytes ("Hello")
+    read(fd, &buf, 5);
+    buf[5] = 0; // Null terminate
+    print("   Read from start: ");
+    print(&buf);
+    print("\n");
+
+    // Seek to offset 6 (skip "Hello ") to read "World"
+    lseek(fd, 6, SEEK_SET);
+    read(fd, &buf, 5);
+    buf[5] = 0;
+    print("   Read from offset 6: ");
+    print(&buf);
+    print("\n");
+
+    close(fd);
+
+    // 4. rename
+    print("4. Renaming to 'testdir/file_b.txt'...\n");
+    if rename("testdir/file_a.txt", "testdir/file_b.txt") < 0 {
+        print("Error: Rename failed\n");
+    }
+
+    // 5. unlink (delete)
+    print("5. Deleting 'testdir/file_b.txt'...\n");
+    if unlink("testdir/file_b.txt") < 0 {
+        print("Error: Unlink failed\n");
+    }
+
+    print("Success.\n");
+    return 0;
+}

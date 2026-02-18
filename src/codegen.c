@@ -127,12 +127,6 @@ void gen_asm(ASTNode *node) {
 			// Evaluate Initializer (if any)
 			if (node->left) {
 				 gen_asm(node->left);
-			} else {
-				// If no initializer (e.g. 'Point p;'), verify we reserve space
-				// but we don't push anything.
-				// Actually, our stack convention requires the value to be on stack
-				// to pop into the variable slot.
-				// For structs, we usually just reserve space.
 			}
 
 			// Register Symbol
@@ -143,7 +137,11 @@ void gen_asm(ASTNode *node) {
 				// If it's a primitive, pop into [rbp + offset]
 				if (!sdef) {
 					printf("  pop rax\n");
-					printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
+					if (strcmp(type, "char") == 0) {
+						printf("  mov [rbp + %d], al\n", get_offset(node->var_name));
+					} else {
+						printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
+					}
 				}
 				// If it's a struct assignment (Point p = other_p), we need memcpy?
 				// For this tutorial, we assume 'Point p;' (no init) or manual member init.
@@ -334,6 +332,31 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_BINOP:
+            // If right side is a constant INT, skip stack operations
+            if (node->right->type == NODE_INT) {
+                gen_asm(node->left); // Result in RAX (and pushed)
+                printf("  pop rax\n");
+                
+                int val = node->right->int_value;
+                
+                if (node->op == '+') printf("  add rax, %d\n", val);
+                if (node->op == '-') printf("  sub rax, %d\n", val);
+                if (node->op == '*') printf("  imul rax, %d\n", val);
+                if (node->op == '&') printf("  and rax, %d\n", val);
+                if (node->op == '|') printf("  or rax, %d\n", val);
+                
+                // Div requires specific registers, let's skip optimization for now
+                if (node->op == '/') {
+                    printf("  mov rbx, %d\n", val);
+                    printf("  cqo\n");
+                    printf("  idiv rbx\n");
+                }
+
+                printf("  push rax\n");
+                break;
+            }
+
+            // Standard implementation (Variable/Complex on right side)
 			gen_asm(node->left);
 			gen_asm(node->right);
 

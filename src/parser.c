@@ -16,6 +16,7 @@ ASTNode *create_node(NodeType type)
 	node->line = current_token.line;
 	node->column = current_token.column;
 	node->offset = current_token.offset;
+	node->is_reachable = 0;
 	return node;
 }
 
@@ -628,24 +629,83 @@ void optimize_ast(ASTNode *node)
 			int v1 = node->left->int_value;
 			int v2 = node->right->int_value;
 			int res = 0;
+			int handled = 1;
 
 			switch (node->op) {
 				case '+': res = v1 + v2; break;
 				case '-': res = v1 - v2; break;
 				case '*': res = v1 * v2; break;
-				case '/': if (v2 != 0) res = v1 / v2; break;
-				// Add other ops as needed
+				case '/':
+					if (v2 != 0) res = v1 / v2;
+					else handled = 0;
+					break;
+				case '|': res = v1 | v2; break;
+				case '&': res = v1 & v2; break;
+				default: handled = 0; break;
+
 			}
 
-			// Transform this node into a literal INT
-			node->type = NODE_INT;
-			node->int_value = res;
+			if (handled) {
+				// Transform this node into a literal INT
+				node->type = NODE_INT;
+				node->int_value = res;
 
-			// Free the dead children
-			free(node->left);
-			free(node->right);
-			node->left = NULL;
-			node->right = NULL;
+				// Free the dead children
+				free(node->left);
+				free(node->right);
+				node->left = NULL;
+				node->right = NULL;
+			}
 		}
+	}
+}
+
+// Helper: Find a function definition in the global list
+ASTNode *find_function(ASTNode *list, char *name)
+{
+	while (list) {
+		if (list->type == NODE_FUNCTION && strcmp(list->var_name, name) == 0)
+			return list;
+		list = list->next;
+	}
+	return NULL;
+}
+
+// Recursive marker
+void mark_reachable(ASTNode *node, ASTNode *all_funcs) {
+	if (!node) return;
+
+	// If we find a function call, mark the definition as reachable
+	if (node->type == NODE_FUNC_CALL) {
+		ASTNode *target = find_function(all_funcs, node->var_name);
+		
+		// If found and not yet visited, mark it and recurse into IT
+		if (target && !target->is_reachable) {
+			target->is_reachable = 1;
+			mark_reachable(target->body, all_funcs);
+		}
+	}
+
+	// Traverse children
+	mark_reachable(node->left, all_funcs);
+	mark_reachable(node->right, all_funcs);
+	mark_reachable(node->body, all_funcs);
+	
+	// CAREFUL: Don't traverse 'next' if it leaves the current scope function chain
+	// But for blocks/statements, we do need 'next'. 
+	// Since functions are chained via 'next' at the top level, we handle that in analyze_reachability
+	if (node->type != NODE_FUNCTION) {
+		mark_reachable(node->next, all_funcs);
+	}
+}
+
+// Main entry point for DCE
+void analyze_reachability(ASTNode *all_funcs) {
+	// Find 'main'
+	ASTNode *main_func = find_function(all_funcs, "main");
+	
+	if (main_func) {
+		main_func->is_reachable = 1;
+		mark_reachable(main_func->body, all_funcs);
 	}
 }

@@ -70,3 +70,52 @@ fn print_int_recursive(n: int) -> int
 	print_char(rem + 48);
 	return 0;
 }
+
+// ==========================================
+// MEMORY MANAGEMENT
+// ==========================================
+
+#define PROT_READ  1
+#define PROT_WRITE 2
+#define MAP_PRIVATE 2
+#define MAP_ANONYMOUS 32
+
+// Allocate 'size' bytes of memory
+fn malloc(size: int) -> ptr
+{
+	// Calculate total size including header
+	// We need 8 bytes to store the size so free() knows how much to unmap
+	int total_size = size + 8;
+
+	// Request memory from the OS
+	ptr block = mmap(0, total_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+	// Check for error (negative address)
+	if block < 0 {
+		return 0;
+	}
+
+	// Store the size in the first 8 bytes (the header)
+	*block = total_size;
+
+	// Return pointer to the data
+	return block + 8;
+}
+
+// Free memory previously allocated by malloc
+fn free(p: ptr) -> int
+{
+	// Do nothing if the ptr is 0
+	if p == 0 {
+		return 0;
+	}
+
+	// Recover the header address (backup 8 bytes)
+	ptr block = p - 8;
+
+	// Read the stored size
+	int size = *block;
+
+	// Unmap the memory
+	return munmap(block, size);
+}

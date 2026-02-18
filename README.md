@@ -156,14 +156,16 @@ The compiler comes with a lightweight standard library that wraps common syscall
 
 ## TODO
 
-- [ ] **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
 - [X] **`char` Type (1-byte support):** Right now, ptr math assumes everything is 1 byte, but variables are 8 bytes. Adding a distinct char type would make string manipulation significantly safer and easier than manually masking & 255.
 - [X] **Command Line Arguments:** Impliment `argv` and `argc`
+- [ ] **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
+- [X] **Simple Heap Allocation:** Impliment malloc/free.
 - [ ] **Implicit Bounds Checking**
 - [ ] **Detailed error messages**
 - [ ] **`for` loops**
 - [ ] **Optimization passes on generated assembly**
 - [ ] **~~Structs~~ & Nested structs**
+- [ ] **Debug info**
 
 ---
 
