@@ -8,6 +8,8 @@
 ASTNode *create_node(NodeType type)
 {
 	ASTNode *node = malloc(sizeof(ASTNode));
+	if (!node)
+		error("Failed to create node!");
 	node->type = type;
 	node->left = node->right = node->body = node->next = NULL;
 	node->int_value = 0;
@@ -30,6 +32,7 @@ ASTNode *parse_block(void);
 ASTNode *parse_syscall(void);
 ASTNode *parse_struct_definition(void);
 
+static
 ASTNode *parse_if(void)
 {
 	advance(); // Skip 'if'
@@ -54,6 +57,7 @@ ASTNode *parse_if(void)
 	return node;
 }
 
+static
 ASTNode *parse_while(void)
 {
 	advance();  // Skip 'while'
@@ -68,6 +72,7 @@ ASTNode *parse_while(void)
 }
 
 // Factor: handles integers, variables, access
+static
 ASTNode *parse_factor(void)
 {
 	// Handle Integers
@@ -192,7 +197,7 @@ ASTNode *parse_factor(void)
 			size = 8;
 			advance();
 		} else if (current_token.type == TOKEN_IDENTIFIER) {
-			StructDef *sdef = get_struct(current_token.name);
+			const StructDef *sdef = get_struct(current_token.name);
 			if (sdef) {
 				size = sdef->size;
 				advance();
@@ -235,6 +240,7 @@ ASTNode *parse_factor(void)
 	exit(1);
 }
 
+static
 ASTNode *parse_unary(void)
 {
 	// Address Of (&x or &p.x)
@@ -267,6 +273,7 @@ ASTNode *parse_unary(void)
 	return parse_factor();
 }
 
+static
 ASTNode *parse_term(void)
 {
 	ASTNode *node = parse_unary();
@@ -281,6 +288,7 @@ ASTNode *parse_term(void)
 	return node;
 }
 
+static
 ASTNode *parse_math(void)
 {
 	ASTNode *node = parse_term();
@@ -295,6 +303,7 @@ ASTNode *parse_math(void)
 	return node;
 }
 
+static
 ASTNode *parse_bitwise(void) {
 	ASTNode *node = parse_math();
 	while (current_token.type == TOKEN_AMP || current_token.type == TOKEN_PIPE) {
@@ -309,6 +318,7 @@ ASTNode *parse_bitwise(void) {
 	return node;
 }
 
+static
 ASTNode *parse_comparison(void)
 {
 	ASTNode *node = parse_bitwise();
@@ -405,7 +415,7 @@ ASTNode *parse_struct_definition(void)
 			advance();
 		} else if (current_token.type == TOKEN_IDENTIFIER) {
 			// Support nested structs (e.g. p: Point)
-			StructDef *sub = get_struct(current_token.name);
+			const StructDef *sub = get_struct(current_token.name);
 			if (sub) {
 				mem_size = sub->size;
 				advance();
@@ -436,6 +446,7 @@ ASTNode *parse_struct_definition(void)
 }
 
 // Variable Declaration: int x; OR Point p;
+static
 ASTNode *parse_var_declaration(void)
 {
 	char *type_name = NULL;
@@ -507,6 +518,7 @@ ASTNode *parse_var_declaration(void)
 	return node;
 }
 
+static
 ASTNode *parse_statement(void)
 {
 	if (current_token.type == TOKEN_RETURN) {
@@ -599,7 +611,7 @@ ASTNode *parse_function(void)
 
 		// Parameter Types
 		// We use member_name to store the type string for params too
-		char *type = "int";
+		const char *type = "int";
 		if (current_token.type == TOKEN_INT_TYPE) { type = "int"; advance(); }
 		else if (current_token.type == TOKEN_PTR_TYPE) { type = "ptr"; advance(); }
 		else if (current_token.type == TOKEN_CHAR_TYPE) { type = "char"; advance(); }
@@ -716,7 +728,8 @@ void optimize_ast(ASTNode *node)
 }
 
 // Helper: Find a function definition in the global list
-ASTNode *find_function(ASTNode *list, char *name)
+static
+ASTNode *find_function(ASTNode *list, const char *name)
 {
 	while (list) {
 		if (list->type == NODE_FUNCTION && strcmp(list->var_name, name) == 0)
@@ -727,6 +740,7 @@ ASTNode *find_function(ASTNode *list, char *name)
 }
 
 // Recursive marker
+static
 void mark_reachable(ASTNode *node, ASTNode *all_funcs) {
 	if (!node) return;
 

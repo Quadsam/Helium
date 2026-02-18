@@ -11,14 +11,16 @@ typedef struct {
 Macro macros[100];
 int macro_count = 0;
 
-void add_macro(char *name, Token value)
+static
+void add_macro(const char *name, Token value)
 {
 	strcpy(macros[macro_count].name, name);
 	macros[macro_count].value = value;
 	macro_count++;
 }
 
-Token *get_macro(char *name)
+static
+Token *get_macro(const char *name)
 {
 	for (int i = 0; i < macro_count; i++) {
 		if (strcmp(macros[i].name, name) == 0)
@@ -70,6 +72,7 @@ Token get_next_token(void)
 	// Handle Identifiers/Keywords (Allow _ at start)
 	if (isalpha(current) || current == '_') {
 		Token t;
+		t.value = 0;
 		t.line = start_line;
 		t.column = start_col;
 		t.offset = start_offset;
@@ -99,7 +102,7 @@ Token get_next_token(void)
 		else t.type = TOKEN_IDENTIFIER;
 
 		// CHECK MACROS
-		Token *macro = get_macro(t.name);
+		const Token *macro = get_macro(t.name);
 		if (macro) {
 			// Return the stored token (e.g., the INT 100)
 			// But preserve the current line/col info so errors point to the usage

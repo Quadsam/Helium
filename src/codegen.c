@@ -5,6 +5,7 @@
 // Label generation for if/while/strings
 static int label_counter = 0;
 
+static
 int new_label()
 {
 	return label_counter++;
@@ -43,7 +44,8 @@ Symbol symbols[100];
 int symbol_count = 0;
 int current_stack_offset = 0;
 
-Symbol *get_symbol(char *name, int line, int col, int offset)
+static
+Symbol *get_symbol(const char *name, int line, int col, int offset)
 {
 	for (int i = 0; i < symbol_count; i++) {
 		if (strcmp(symbols[i].name, name) == 0) {
@@ -59,12 +61,14 @@ Symbol *get_symbol(char *name, int line, int col, int offset)
 }
 
 // Wrapper for old calls that just want the offset
-int get_offset(char *name)
+static
+int get_offset(const char *name)
 {
 	return get_symbol(name, 0, 0, 0)->offset;
 }
 
-void add_symbol(char *name, char *type_name, int size)
+static
+void add_symbol(const char *name, const char *type_name, int size)
 {
 	current_stack_offset -= size;  // Grow stack down by size bytes
 
@@ -91,11 +95,11 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_VAR_REF: {
-			Symbol *sym = get_symbol(node->var_name, node->line, node->column, node->offset);
+			const Symbol *sym = get_symbol(node->var_name, node->line, node->column, node->offset);
 
 			// If it's a STRUCT, we push its address (like an array)
 			// If it's an INT/PTR, we push its value
-			StructDef *sdef = get_struct(sym->type_name);
+			const StructDef *sdef = get_struct(sym->type_name);
 			if (sdef) {
 				// Struct: Push address (lea)
 				// This allows 'p = p2' to work via memcpy logic if we implemented it,
@@ -113,13 +117,13 @@ void gen_asm(ASTNode *node) {
 
 		case NODE_VAR_DECL: {
 			// Determine Type & Size
-			char *type = node->member_name; // We stored type here in Parser
+			const char *type = node->member_name;	// We stored type here in Parser
 			if (type == NULL) type = "int"; // Default safety
 
 			int size = 8;
 			if (strcmp(type, "char") == 0) size = 1;
 
-			StructDef *sdef = get_struct(type);
+			const StructDef *sdef = get_struct(type);
 			if (sdef) {
 				size = sdef->size;
 			}
@@ -151,7 +155,7 @@ void gen_asm(ASTNode *node) {
 			}
 
 			// Find variable info
-			Symbol *sym = get_symbol(node->left->var_name, node->line, node->column, node->offset);
+			const Symbol *sym = get_symbol(node->left->var_name, node->line, node->column, node->offset);
 			StructDef *sdef = get_struct(sym->type_name);
 			if (!sdef) {
 				fprintf(stderr, "Error: Variable '%s' is not a struct\n", sym->name);
@@ -196,8 +200,8 @@ void gen_asm(ASTNode *node) {
 		case NODE_ADDR: {
 			// &p.x
 			if (node->left->type == NODE_MEMBER_ACCESS) {
-				ASTNode *access = node->left;
-				Symbol *sym = get_symbol(access->left->var_name, node->line, node->column, node->offset);
+				const ASTNode *access = node->left;
+				const Symbol *sym = get_symbol(access->left->var_name, node->line, node->column, node->offset);
 				StructDef *sdef = get_struct(sym->type_name);
 
 				int mem_offset = 0;
@@ -233,8 +237,8 @@ void gen_asm(ASTNode *node) {
 			if (node->left && node->left->type == NODE_MEMBER_ACCESS) {
 				gen_asm(node->right); // Push Value
 
-				ASTNode *access = node->left;
-				Symbol *sym = get_symbol(access->left->var_name, node->line, node->column, node->offset);
+				const ASTNode *access = node->left;
+				const Symbol *sym = get_symbol(access->left->var_name, node->line, node->column, node->offset);
 				StructDef *sdef = get_struct(sym->type_name);
 
 				int mem_offset = 0;
@@ -280,7 +284,7 @@ void gen_asm(ASTNode *node) {
 				int offset = get_offset(node->left->var_name);
 
 				// Check array type for scaling
-				Symbol *sym = get_symbol(node->left->var_name, node->line, node->column, node->offset);
+				const Symbol *sym = get_symbol(node->left->var_name, node->line, node->column, node->offset);
 				int is_char_arr = (strncmp(sym->type_name, "char", 4) == 0);
 				int scale = is_char_arr ? 1 : 8;
 
@@ -306,7 +310,7 @@ void gen_asm(ASTNode *node) {
 					 exit(1);
 				}
 
-				Symbol *sym = get_symbol(node->var_name, node->line, node->column, node->offset);
+				const Symbol *sym = get_symbol(node->var_name, node->line, node->column, node->offset);
 				int offset = sym->offset;
 
 				// OPTIMIZATION: Immediate Assignment
@@ -434,7 +438,7 @@ void gen_asm(ASTNode *node) {
 			while (param) {
 				// For params, type is usually int/ptr.
 				// We use member_name as type (see parser).
-				char *type = param->member_name ? param->member_name : "int";
+				const char *type = param->member_name ? param->member_name : "int";
 				add_symbol(param->var_name, type, 8); // Params are always 8 bytes on stack
 
 				int offset = get_offset(param->var_name);
@@ -538,7 +542,7 @@ void gen_asm(ASTNode *node) {
 		}
 
 		case NODE_POST_INC: {
-			char* var_name = node->left->var_name;
+			const char *var_name = node->left->var_name;
 			int offset = get_offset(var_name);
 
 			printf("  mov rax, [rbp + %d]\n", offset);
@@ -564,7 +568,7 @@ void gen_asm(ASTNode *node) {
 			int size = node->int_value;
 
 			// Calculate size based on type
-			char *type = node->member_name ? node->member_name : "int";
+			const char *type = node->member_name ? node->member_name : "int";
 			int elem_size = (strcmp(type, "char") == 0) ? 1 : 8;
 			int total_size = size * elem_size;
 
@@ -582,7 +586,7 @@ void gen_asm(ASTNode *node) {
 			int offset = get_offset(node->var_name);
 
 			// Determine scale
-			Symbol *sym = get_symbol(node->var_name, node->line, node->column, node->offset);
+			const Symbol *sym = get_symbol(node->var_name, node->line, node->column, node->offset);
 			int is_char_arr = (strncmp(sym->type_name, "char", 4) == 0);
 			int scale = is_char_arr ? 1 : 8;
 

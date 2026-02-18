@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 	}
 
 	char *input_filename = NULL;
-	char *output_filename = "out.s";    // Default output
+	const char *output_filename = "out.s";	// Default output
 
 	// Parse Arguments
 	for (int i = 1; i < argc; i++) {
@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 
 	// Generate Output
 	// Redirect stdout to the file so our existing printf statements work
-	FILE *out_file = freopen(output_filename, "w", stdout);
+	const FILE *out_file = freopen(output_filename, "w", stdout);
 	if (!out_file) {
 		fprintf(stderr, "Error: Could not open output file %s\n", output_filename);
 		free(source_code);

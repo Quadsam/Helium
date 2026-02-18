@@ -5,6 +5,7 @@
 /* ========================================================================= */
 
 // Helper to append string to buffer, resizing if necessary
+static
 void append_string(char **buffer, int *length, int *capacity, const char *str)
 {
 	int str_len = strlen(str);
@@ -43,7 +44,7 @@ char *preprocess_file(const char *filename)
 		file_line_number++; // We are about to process this line
 		
 		// Check for #include
-		char *include_ptr = strstr(line, "#include");
+		const char *include_ptr = strstr(line, "#include");
 		
 		if (include_ptr) {
 			char *start_quote = strchr(line, '"');
@@ -51,7 +52,7 @@ char *preprocess_file(const char *filename)
 			
 			if (start_quote && end_quote && end_quote > start_quote) {
 				*end_quote = '\0';
-				char *included_filename = start_quote + 1;
+				const char *included_filename = start_quote + 1;
 				
 				// Recursively read the included file
 				// (The child call will emit its own "start marker")
