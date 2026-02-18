@@ -17,6 +17,7 @@ ASTNode *create_node(NodeType type)
 	node->column = current_token.column;
 	node->offset = current_token.offset;
 	node->is_reachable = 0;
+	node->is_arrow_access = 0;
 	return node;
 }
 
@@ -91,7 +92,7 @@ ASTNode *parse_factor(void)
 		node->var_name = strdup(current_token.name);
 		advance();
 
-		// 1. Check for Member Access: p.x
+		// Check for Member Access: p.x
 		if (current_token.type == TOKEN_PERIOD) {
 			advance(); // Consume '.'
 			if (current_token.type != TOKEN_IDENTIFIER) error("Expected member name");
@@ -105,7 +106,21 @@ ASTNode *parse_factor(void)
 			return access;
 		}
 
-		// 2. Check for Function Call: add(1, 2)
+		// Check for Arrow Access: p->x
+		if (current_token.type == TOKEN_ARROW) {
+			advance(); // Consume '->'
+			if (current_token.type != TOKEN_IDENTIFIER) error("Expected member name after '->'");
+
+			ASTNode *access = create_node(NODE_MEMBER_ACCESS);
+			access->left = node; // The pointer 'p'
+			access->member_name = strdup(current_token.name); // The member 'x'
+			access->is_arrow_access = 1; // <--- MARK AS ARROW
+			advance();
+
+			return access;
+		}
+
+		// Check for Function Call: add(1, 2)
 		if (current_token.type == TOKEN_LPAREN) {
 			advance();  // consume '('
 
@@ -133,7 +148,7 @@ ASTNode *parse_factor(void)
 			return call_node;
 		}
 
-		// 3. Check for Array Access: x[i]
+		// Check for Array Access: x[i]
 		if (current_token.type == TOKEN_LBRACKET) {
 			advance();  // consume '['
 			ASTNode *index = parse_expression();
@@ -148,7 +163,7 @@ ASTNode *parse_factor(void)
 			return array_node;
 		}
 
-		// 4. Post-Increment: i++
+		// Post-Increment: i++
 		if (current_token.type == TOKEN_INC) {
 			advance();
 			ASTNode* inc_node = create_node(NODE_POST_INC);

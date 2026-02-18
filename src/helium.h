@@ -102,8 +102,8 @@ typedef struct ASTNode {
 	int column;             // For error handling
 	int offset;             // For error handling
 	int is_reachable;		// Tracks reachability
+	int is_arrow_access;	// 1 = p->x, 0 = p.x
 } ASTNode;
-
 
 // --- Struct Registry ---
 typedef struct {

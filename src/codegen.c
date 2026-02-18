@@ -134,41 +134,31 @@ void gen_asm(ASTNode *node) {
 
 			// Move data from stack to variable slot
 			if (node->left) {
-				// If it's a primitive, pop into [rbp + offset]
-				if (!sdef) {
-					printf("  pop rax\n");
-					if (strcmp(type, "char") == 0) {
-						printf("  mov [rbp + %d], al\n", get_offset(node->var_name));
-					} else {
-						printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
-					}
-				}
-				// If it's a struct assignment (Point p = other_p), we need memcpy?
-				// For this tutorial, we assume 'Point p;' (no init) or manual member init.
+				printf("  pop rax\n");
+
+				if (strcmp(type, "char") == 0)
+					printf("  mov [rbp + %d], al\n", get_offset(node->var_name));
+				else
+					printf("  mov [rbp + %d], rax\n", get_offset(node->var_name));
 			}
 			break;
 		}
 
 		case NODE_MEMBER_ACCESS: {
-			// node->left is the variable (e.g., 'p' in 'p.x')
-			// node->member_name is "x"
-
 			if (node->left->type != NODE_VAR_REF) {
 				fprintf(stderr, "Error: Member access only supported on variables\n");
 				exit(1);
 			}
 
-			// 1. Find variable 'p'
+			// Find variable info
 			Symbol *sym = get_symbol(node->left->var_name, node->line, node->column, node->offset);
-
-			// 2. Find struct definition 'Point'
 			StructDef *sdef = get_struct(sym->type_name);
 			if (!sdef) {
 				fprintf(stderr, "Error: Variable '%s' is not a struct\n", sym->name);
 				exit(1);
 			}
 
-			// 3. Find member 'x' offset
+			// Find member offset
 			int mem_offset = -1;
 			for (int i = 0; i < sdef->member_count; i++) {
 				if (strcmp(sdef->members[i].name, node->member_name) == 0) {
@@ -181,18 +171,24 @@ void gen_asm(ASTNode *node) {
 				exit(1);
 			}
 
-			// 4. Calculate Address: rbp + struct_base + member_offset
-			// Stack grows down, but struct layout is positive from base?
-			// If p is at -16 (size 16), it spans -16 to 0.
-			// sdef->members[0] is at offset 0.
-			// So address is (rbp + sym->offset) + mem_offset.
+			// GENERATE ADDRESS & LOAD
+			if (node->is_arrow_access) {
+				// HEAP ACCESS (p->x)
+				// Load the pointer address stored in the stack variable 'p'
+				printf("  mov rax, [rbp + %d]\n", sym->offset);
 
-			int total_offset = sym->offset + mem_offset;
+				// Add the member offset
+				printf("  add rax, %d\n", mem_offset);
 
-			// For reading (right side of assignment): Load value
-			// For writing (left side): handled in NODE_ASSIGN special case?
-			// Current naive implementation: Load Value.
-			printf("  mov rax, [rbp + %d]\n", total_offset);
+				// Load the value AT that heap address
+				printf("  mov rax, [rax]\n");
+			} else {
+				// STACK ACCESS (p.x)
+				// Calculate absolute stack address
+				int total_offset = sym->offset + mem_offset;
+				printf("  mov rax, [rbp + %d]\n", total_offset);
+			}
+
 			printf("  push rax\n");
 			break;
 		}
@@ -250,8 +246,22 @@ void gen_asm(ASTNode *node) {
 				}
 
 				printf("  pop rax\n"); // Value
-				int total_offset = sym->offset + mem_offset;
-				printf("  mov [rbp + %d], rax\n", total_offset);
+
+				if (access->is_arrow_access) {
+					// HEAP WRITE (p->x = val)
+					// 1. Load the pointer 'p' into rbx
+					printf("  mov rbx, [rbp + %d]\n", sym->offset);
+					
+					// 2. Add member offset
+					printf("  add rbx, %d\n", mem_offset);
+					
+					// 3. Write value (rax) to address (rbx)
+					printf("  mov [rbx], rax\n");
+				} else {
+					// STACK WRITE (p.x = val)
+					int total_offset = sym->offset + mem_offset;
+					printf("  mov [rbp + %d], rax\n", total_offset);
+				}
 			}
 			// POINTER ASSIGNMENT (*ptr = val)
 			else if (node->left && node->left->type == NODE_DEREF) {
@@ -332,31 +342,30 @@ void gen_asm(ASTNode *node) {
 			break;
 
 		case NODE_BINOP:
-            // If right side is a constant INT, skip stack operations
-            if (node->right->type == NODE_INT) {
-                gen_asm(node->left); // Result in RAX (and pushed)
-                printf("  pop rax\n");
-                
-                int val = node->right->int_value;
-                
-                if (node->op == '+') printf("  add rax, %d\n", val);
-                if (node->op == '-') printf("  sub rax, %d\n", val);
-                if (node->op == '*') printf("  imul rax, %d\n", val);
-                if (node->op == '&') printf("  and rax, %d\n", val);
-                if (node->op == '|') printf("  or rax, %d\n", val);
-                
-                // Div requires specific registers, let's skip optimization for now
-                if (node->op == '/') {
-                    printf("  mov rbx, %d\n", val);
-                    printf("  cqo\n");
-                    printf("  idiv rbx\n");
-                }
+			// If right side is a constant INT, skip stack operations
+			if (node->right->type == NODE_INT) {
+				gen_asm(node->left); // Result in RAX (and pushed)
+				printf("  pop rax\n");
 
-                printf("  push rax\n");
-                break;
-            }
+				int val = node->right->int_value;
+				if (node->op == '+') printf("  add rax, %d\n", val);
+				if (node->op == '-') printf("  sub rax, %d\n", val);
+				if (node->op == '*') printf("  imul rax, %d\n", val);
+				if (node->op == '&') printf("  and rax, %d\n", val);
+				if (node->op == '|') printf("  or rax, %d\n", val);
 
-            // Standard implementation (Variable/Complex on right side)
+				// Div requires specific registers, let's skip optimization for now
+				if (node->op == '/') {
+					printf("  mov rbx, %d\n", val);
+					printf("  cqo\n");
+					printf("  idiv rbx\n");
+				}
+
+				printf("  push rax\n");
+				break;
+			}
+
+			// Standard implementation (Variable/Complex on right side)
 			gen_asm(node->left);
 			gen_asm(node->right);
 
