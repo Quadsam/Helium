@@ -1,5 +1,7 @@
 CC        := gcc
 TARGET    := heliumc
+CFLAGS    := -std=gnu23 -Wall -Wextra -Werror
+LDFLAGS   :=
 
 # Directories
 SRC_DIR   := src
@@ -10,13 +12,17 @@ BIN_DIR   := bin
 MODE ?= debug
 
 ifeq ($(MODE), release)
-	CFLAGS  := -std=gnu23 -Wall -Wextra -Werror -O3 -DNDEBUG
-	LDFLAGS :=
+	CFLAGS  += -O2 -DNDEBUG
 	MSG     := "RELEASE MODE (Optimized)"
 else
-	CFLAGS  := -std=gnu23 -Wall -Wextra -ggdb -O0 -fsanitize=address
-	LDFLAGS := -fsanitize=address
-	MSG     := "DEBUG MODE (ASan enabled)"
+	ifeq ($(MODE), valgrind)
+		CFLAGS  += -ggdb -O0
+		MSG     := "VALGRIND DEBUG MODE (ASan disabled)"
+	else
+		CFLAGS  += -ggdb -O0 -fsanitize=address
+		LDFLAGS += -fsanitize=address
+		MSG     := "DEBUG MODE (ASan enabled)"
+	endif
 endif
 
 SRCS      := $(wildcard $(SRC_DIR)/*.c)
