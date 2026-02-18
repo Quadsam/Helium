@@ -70,4 +70,3 @@ fn print_int_recursive(n: int) -> int
 	print_char(rem + 48);
 	return 0;
 }
-
