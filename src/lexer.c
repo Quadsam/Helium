@@ -95,6 +95,7 @@ Token get_next_token(void)
 		else if (strcmp(t.name, "else")     == 0) t.type = TOKEN_ELSE;
 		else if (strcmp(t.name, "while")    == 0) t.type = TOKEN_WHILE;
 		else if (strcmp(t.name, "syscall")  == 0) t.type = TOKEN_SYSCALL;
+		else if (strcmp(t.name, "sizeof")   == 0) t.type = TOKEN_SIZEOF;
 		else t.type = TOKEN_IDENTIFIER;
 
 		// CHECK MACROS
@@ -372,7 +373,8 @@ void advance(void)
 			current_token.type == TOKEN_IF ||
 			current_token.type == TOKEN_ELSE ||
 			current_token.type == TOKEN_WHILE ||
-			current_token.type == TOKEN_SYSCALL) {
+			current_token.type == TOKEN_SYSCALL ||
+			current_token.type == TOKEN_SIZEOF) {
 			free(current_token.name);
 		}
 	}

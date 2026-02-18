@@ -48,7 +48,8 @@ typedef enum {
 	TOKEN_IF,           // if
 	TOKEN_ELSE,         // else
 	TOKEN_WHILE,        // while
-	TOKEN_SYSCALL,      // syscall
+	TOKEN_SYSCALL,      // syscall()
+	TOKEN_SIZEOF,		// sizeof()
 	TOKEN_STRING,       // "string"
 } TokenType;
 

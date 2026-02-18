@@ -174,6 +174,41 @@ ASTNode *parse_factor(void)
 		return node;
 	}
 
+	// Handle sizeof(Type)
+	if (current_token.type == TOKEN_SIZEOF) {
+		advance();	// Skip 'sizeof'
+		if (current_token.type != TOKEN_LPAREN) error("Expected '(' after sizeof");
+		advance();	// Skip '('
+
+		int size = 0;
+
+		if (current_token.type == TOKEN_INT_TYPE) {
+			size = 8;
+			advance();
+		} else if (current_token.type == TOKEN_CHAR_TYPE) {
+			size = 1;
+			advance();
+		} else if (current_token.type == TOKEN_PTR_TYPE) {
+			size = 8;
+			advance();
+		} else if (current_token.type == TOKEN_IDENTIFIER) {
+			StructDef *sdef = get_struct(current_token.name);
+			if (sdef) {
+				size = sdef->size;
+				advance();
+			} else
+				error("Unknown type in sizeof");
+		}
+
+		if (current_token.type != TOKEN_RPAREN) error("Expected ')'");
+		advance(); // Skip ')'
+
+		// Return a literal Integer node
+		ASTNode *node = create_node(NODE_INT);
+		node->int_value = size;
+		return node;
+	}
+
 	// Handle Parentheses
 	if (current_token.type == TOKEN_LPAREN) {
 		advance();
@@ -365,13 +400,18 @@ ASTNode *parse_struct_definition(void)
 		if (current_token.type == TOKEN_CHAR_TYPE) {
 			mem_size = 1;
 			advance();
-		}
-
-		// In the future we can support nested structs here
-
-		if (current_token.type == TOKEN_INT_TYPE ||
-			current_token.type == TOKEN_PTR_TYPE) {
+		} else if (current_token.type == TOKEN_INT_TYPE ||
+					current_token.type == TOKEN_PTR_TYPE) {
 			advance();
+		} else if (current_token.type == TOKEN_IDENTIFIER) {
+			// Support nested structs (e.g. p: Point)
+			StructDef *sub = get_struct(current_token.name);
+			if (sub) {
+				mem_size = sub->size;
+				advance();
+			} else {
+				error("Unknown member type");
+			}
 		} else {
 			error("Unknown member type");
 		}

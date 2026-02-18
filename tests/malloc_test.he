@@ -11,7 +11,7 @@ fn main()
 
 	// Allocate using sizeof(Point) - which is 16
 	// Note: We don't have 'sizeof' keyword yet, so hardcode 16
-	Point p = malloc(16);
+	Point p = malloc(sizeof(Point));
 
 	// Clean Syntax!
 	p->x = 42;
