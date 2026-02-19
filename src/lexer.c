@@ -97,6 +97,8 @@ Token get_next_token(void)
 		else if (strcmp(t.name, "if")       == 0) t.type = TOKEN_IF;
 		else if (strcmp(t.name, "else")     == 0) t.type = TOKEN_ELSE;
 		else if (strcmp(t.name, "while")    == 0) t.type = TOKEN_WHILE;
+		else if (strcmp(t.name, "for")      == 0) t.type = TOKEN_FOR;
+		else if (strcmp(t.name, "in")       == 0) t.type = TOKEN_IN;
 		else if (strcmp(t.name, "syscall")  == 0) t.type = TOKEN_SYSCALL;
 		else if (strcmp(t.name, "sizeof")   == 0) t.type = TOKEN_SIZEOF;
 		else t.type = TOKEN_IDENTIFIER;
@@ -154,7 +156,13 @@ Token get_next_token(void)
 		case ',': src_pos++; current_col++; return (Token){",", TOKEN_COMMA, 0, start_line, start_col, start_offset};
 		case ';': src_pos++; current_col++; return (Token){";", TOKEN_SEMI, 0, start_line, start_col, start_offset};
 		case ':': src_pos++; current_col++; return (Token){":", TOKEN_COLON, 0, start_line, start_col, start_offset};
-		case '.': src_pos++; current_col++;	return (Token){".", TOKEN_PERIOD, 0, start_line, start_col, start_offset};
+		case '.':
+			src_pos++; current_col++;
+			if (source_code[src_pos] == '.') {
+				src_pos++; current_col++;
+				return (Token){"..", TOKEN_DOTDOT, 0, start_line, start_col, start_offset};
+			}
+			return (Token){".", TOKEN_PERIOD, 0, start_line, start_col, start_offset};
 		case '*': src_pos++; current_col++; return (Token){"*", TOKEN_STAR, 0, start_line, start_col, start_offset};
 		case '|': src_pos++; current_col++; return (Token){"|", TOKEN_PIPE, 0, start_line, start_col, start_offset};
 		case '&': src_pos++; current_col++; return (Token){"&", TOKEN_AMP, 0, start_line, start_col, start_offset};
@@ -363,9 +371,8 @@ Token get_next_token(void)
 
 void advance(void)
 {
-	if (current_token.name) {
-		if (
-			current_token.type == TOKEN_IDENTIFIER ||
+	if (current_token.name)
+		if (current_token.type == TOKEN_IDENTIFIER ||
 			current_token.type == TOKEN_STRING ||
 			current_token.type == TOKEN_FN ||
 			current_token.type == TOKEN_INT_TYPE ||
@@ -376,11 +383,47 @@ void advance(void)
 			current_token.type == TOKEN_IF ||
 			current_token.type == TOKEN_ELSE ||
 			current_token.type == TOKEN_WHILE ||
+			current_token.type == TOKEN_FOR ||
+			current_token.type == TOKEN_IN ||
 			current_token.type == TOKEN_SYSCALL ||
-			current_token.type == TOKEN_SIZEOF) {
+			current_token.type == TOKEN_SIZEOF)
 			free(current_token.name);
-		}
-	}
 
 	current_token = get_next_token();
+}
+
+Token peek_next_token(void)
+{
+	int saved_pos = src_pos;
+	int saved_line = current_line;
+	int saved_col = current_col;
+	
+	Token next = get_next_token();
+	
+	// Restore state
+	src_pos = saved_pos;
+	current_line = saved_line;
+	current_col = saved_col;
+	
+	// Cleanup peeked token memory to prevent leaks
+	if (next.name && next.type != TOKEN_EOF) {
+		if (next.type == TOKEN_IDENTIFIER ||
+			next.type == TOKEN_STRING || 
+			next.type == TOKEN_FN ||
+			next.type == TOKEN_INT_TYPE || 
+			next.type == TOKEN_PTR_TYPE ||
+			next.type == TOKEN_CHAR_TYPE || 
+			next.type == TOKEN_STRUCT ||
+			next.type == TOKEN_RETURN || 
+			next.type == TOKEN_IF ||
+			next.type == TOKEN_ELSE || 
+			next.type == TOKEN_WHILE ||
+			next.type == TOKEN_SYSCALL || 
+			next.type == TOKEN_SIZEOF ||
+			next.type == TOKEN_FOR || 
+			next.type == TOKEN_IN) {
+			free(next.name);
+		}
+	}
+	return next;
 }

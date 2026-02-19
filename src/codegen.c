@@ -635,6 +635,39 @@ void gen_asm(ASTNode *node) {
 			break;
 		}
 
+		case NODE_FOR: {
+			int label_start = new_label();
+			int label_end = new_label();
+
+			// Execute Initialization (e.g., int i = 0;)
+			if (node->left)
+				gen_asm(node->left);
+
+			printf(".L%d:\n", label_start);
+
+			// Check Condition
+			if (node->right) {
+				gen_asm(node->right);
+				printf("  pop rax\n");
+				printf("  cmp rax, 0\n");
+				printf("  je .L%d\n", label_end); // Exit if condition is false
+			}
+
+			// Execute Body
+			if (node->body)
+				gen_asm(node->body);
+
+			// Execute Increment
+			if (node->increment)
+				gen_asm(node->increment);
+
+			// Loop back
+			printf("  jmp .L%d\n", label_start);
+
+			printf(".L%d:\n", label_end);
+			break;
+		}
+
 		// Struct definitions are handled entireley by the parser. They do not
 		// generate any assembly code.
 		case NODE_STRUCT_DEFN: break;

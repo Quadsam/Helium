@@ -1,0 +1,27 @@
+#include "lib/std.he"
+
+fn main()
+{
+    print("=== C-Style Loop ===\n");
+    for (int i = 0; i < 3; i++) {
+        print("Iter: ");
+        print_int(i);
+        print("\n");
+    }
+
+    print("=== Rust-Style Loop ===\n");
+    for x in 5..8 {
+        print("Iter: ");
+        print_int(x);
+        print("\n");
+    }
+
+    print("=== Go/Rust Hybrid Loop ===\n");
+    for int j = 10; j < 13; j++ {
+        print("Iter: ");
+        print_int(j);
+        print("\n");
+    }
+
+    return 0;
+}

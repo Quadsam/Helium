@@ -14,7 +14,8 @@ ASTNode *create_node(NodeType type)
 	node->left = node->right = node->body = node->next = NULL;
 	node->int_value = 0;
 	node->var_name = NULL;
-	node->member_name = NULL; // Initialize new field
+	node->member_name = NULL;
+	node->increment = NULL;
 	node->line = current_token.line;
 	node->column = current_token.column;
 	node->offset = current_token.offset;
@@ -30,6 +31,7 @@ ASTNode *create_node(NodeType type)
 ASTNode *parse_expression(void);
 ASTNode *parse_block(void);
 ASTNode *parse_syscall(void);
+ASTNode *parse_statement(void);
 ASTNode *parse_struct_definition(void);
 
 static
@@ -68,6 +70,78 @@ ASTNode *parse_while(void)
 	ASTNode *node = create_node(NODE_WHILE);
 	node->left = condition;
 	node->body = body;
+	return node;
+}
+
+ASTNode *parse_for(void)
+{
+	advance(); // Skip 'for'
+
+	int has_parens = 0;
+	if (current_token.type == TOKEN_LPAREN) {
+		has_parens = 1;
+		advance();
+	}
+
+	ASTNode *init = NULL;
+	ASTNode *condition = NULL;
+	ASTNode *increment = NULL;
+
+	// Check if Rust-style: "identifier in" (e.g., for i in 0..10)
+	if (current_token.type == TOKEN_IDENTIFIER && peek_next_token().type == TOKEN_IN) {
+		char *var_name = strdup(current_token.name);
+		advance(); // Consume identifier
+		advance(); // Consume 'in'
+
+		ASTNode *start_expr = parse_expression();
+		if (current_token.type != TOKEN_DOTDOT) error("Expected '..' in range");
+		advance(); // Consume '..'
+		ASTNode *end_expr = parse_expression();
+
+		// --- DESUGAR INTO C-STYLE ---
+		
+		// init: int i = start_expr;
+		init = create_node(NODE_VAR_DECL);
+		init->var_name = strdup(var_name);
+		init->member_name = strdup("int");
+		init->left = start_expr;
+
+		// condition: i < end_expr
+		condition = create_node(NODE_LT);
+		condition->left = create_node(NODE_VAR_REF);
+		condition->left->var_name = strdup(var_name);
+		condition->right = end_expr;
+
+		// increment: i++
+		increment = create_node(NODE_POST_INC);
+		increment->left = create_node(NODE_VAR_REF);
+		increment->left->var_name = strdup(var_name);
+
+		free(var_name); // Cleanup original
+	} else {
+		// --- C-STYLE --- (e.g., int i = 0; i < 10; i++)
+		init = parse_statement(); // Automatically consumes the ';'
+
+		condition = parse_expression();
+		if (current_token.type != TOKEN_SEMI) error("Expected ';'");
+		advance(); // consume ';'
+
+		increment = parse_expression();
+	}
+
+	if (has_parens) {
+		if (current_token.type != TOKEN_RPAREN) error("Expected ')'");
+		advance();
+	}
+
+	ASTNode *body = parse_block();
+
+	ASTNode *node = create_node(NODE_FOR);
+	node->left = init;
+	node->right = condition;
+	node->increment = increment;
+	node->body = body;
+
 	return node;
 }
 
@@ -518,7 +592,6 @@ ASTNode *parse_var_declaration(void)
 	return node;
 }
 
-static
 ASTNode *parse_statement(void)
 {
 	if (current_token.type == TOKEN_RETURN) {
@@ -552,6 +625,7 @@ ASTNode *parse_statement(void)
 
 	if (current_token.type == TOKEN_IF) return parse_if();
 	if (current_token.type == TOKEN_WHILE) return parse_while();
+	if (current_token.type == TOKEN_FOR) return parse_for();
 
 	ASTNode *node = parse_expression();
 	if (current_token.type != TOKEN_SEMI) error("Expected ';'");
@@ -674,6 +748,7 @@ void free_ast(ASTNode *node)
 	free_ast(node->right);
 	free_ast(node->body);
 	free_ast(node->next);
+	free_ast(node->increment);
 	if (node->var_name) free(node->var_name);
 	if (node->member_name) free(node->member_name);
 	free(node);
@@ -687,6 +762,7 @@ void optimize_ast(ASTNode *node)
 	optimize_ast(node->right);
 	optimize_ast(node->body);
 	optimize_ast(node->next);
+	optimize_ast(node->increment);
 
 	// Constant Folding: BinOp(Int, Int) -> Int
 	if (node->type == NODE_BINOP) {
@@ -759,6 +835,7 @@ void mark_reachable(ASTNode *node, ASTNode *all_funcs) {
 	mark_reachable(node->left, all_funcs);
 	mark_reachable(node->right, all_funcs);
 	mark_reachable(node->body, all_funcs);
+	mark_reachable(node->increment, all_funcs);
 	
 	// CAREFUL: Don't traverse 'next' if it leaves the current scope function chain
 	// But for blocks/statements, we do need 'next'. 

@@ -48,6 +48,9 @@ typedef enum {
 	TOKEN_IF,           // if
 	TOKEN_ELSE,         // else
 	TOKEN_WHILE,        // while
+	TOKEN_FOR,			// for
+	TOKEN_IN,			// in
+	TOKEN_DOTDOT,		// ..
 	TOKEN_SYSCALL,      // syscall()
 	TOKEN_SIZEOF,		// sizeof()
 	TOKEN_STRING,       // "string"
@@ -73,6 +76,7 @@ typedef enum {
 	NODE_FUNCTION,      // Function definition
 	NODE_IF,            // if ...
 	NODE_WHILE,         // while ...
+	NODE_FOR,			// for ...
 	NODE_GT,            // >
 	NODE_LT,            // <
 	NODE_EQ,            // ==
@@ -91,19 +95,20 @@ typedef enum {
 
 typedef struct ASTNode {
 	NodeType type;
-	int int_value;          // For literals
-	char *var_name;         // For references/declarations
-	char *member_name;      // For p.x, this stores "x"
-	char op;                // For binary ops
-	struct ASTNode *left;   // Left child
-	struct ASTNode *right;  // Right child
-	struct ASTNode *body;   // For functions
-	struct ASTNode *next;   // For linked lists in blocks
-	int line;               // For error handling
-	int column;             // For error handling
-	int offset;             // For error handling
-	int is_reachable;		// Tracks reachability
-	int is_arrow_access;	// 1 = p->x, 0 = p.x
+	int int_value;				// For literals
+	char *var_name;				// For references/declarations
+	char *member_name;			// For p.x, this stores "x"
+	char op;					// For binary ops
+	struct ASTNode *left;		// Left child
+	struct ASTNode *right;		// Right child
+	struct ASTNode *increment;	// For loops
+	struct ASTNode *body;		// For functions
+	struct ASTNode *next;		// For linked lists in blocks
+	int line;					// For error handling
+	int column;					// For error handling
+	int offset;					// For error handling
+	int is_reachable;			// Tracks reachability
+	int is_arrow_access;		// 1 = p->x, 0 = p.x
 } ASTNode;
 
 // --- Struct Registry ---
@@ -142,6 +147,7 @@ extern int struct_count;
 
 // Lexer
 Token get_next_token(void);
+Token peek_next_token(void);
 void advance(void);
 void free_macros(void);
 
