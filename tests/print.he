@@ -5,5 +5,5 @@
 fn main()
 {
 	print("Hello from Helium!\n");
-	exit(0);
+	return EXIT_SUCCESS;
 }

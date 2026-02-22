@@ -10,5 +10,5 @@ fn main()
 	print("Result: ");
 	print_int(a + b);
 	print("\n");
-	exit(a + b);
+	return a + b;
 }

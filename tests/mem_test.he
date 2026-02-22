@@ -1,68 +1,64 @@
 #include "lib/std.he"
 
-#define PROT_READ   1
-#define PROT_WRITE  2
-#define MAP_PRIVATE 2
-#define MAP_ANON    32
+fn main()
+{
+	print("=== Memory Test ===\n");
 
-fn main() {
-    print("=== Memory Test ===\n");
+	int size = 4096;
+	int prot = PROT_READ | PROT_WRITE;
+	int flags = MAP_PRIVATE | MAP_ANON;
 
-    int size = 4096;
-    int prot = PROT_READ | PROT_WRITE;
-    int flags = MAP_PRIVATE | MAP_ANON;
+	// 1. Allocate memory
+	print("1. Requesting 4096 bytes via mmap...\n");
+	ptr heap_mem = mmap(0, size, prot, flags, -1, 0);
 
-    // 1. Allocate memory
-    print("1. Requesting 4096 bytes via mmap...\n");
-    ptr heap_mem = mmap(0, size, prot, flags, -1, 0);
+	// Check for error (negative values)
+	int mem_res = heap_mem;
+	if (mem_res < 0) { 
+		print("Error: mmap failed code ");
+		print_int(mem_res);
+		print("\n");
+		return EXIT_FAILURE;
+	}
 
-    // Check for error (negative values)
-    int mem_res = heap_mem;
-    if (mem_res < 0) { 
-        print("Error: mmap failed code ");
-        print_int(mem_res);
-        print("\n");
-        exit(1);
-    }
+	print("   Got memory at address: ");
+	print_int(heap_mem);
+	print("\n");
 
-    print("   Got memory at address: ");
-    print_int(heap_mem);
-    print("\n");
+	// 2. Write to memory
+	print("2. Writing data to heap...\n");
+	ptr cursor = heap_mem;
+	*cursor = 'A';       
+	
+	cursor = heap_mem + 1;
+	*cursor = 'B';       
 
-    // 2. Write to memory
-    print("2. Writing data to heap...\n");
-    ptr cursor = heap_mem;
-    *cursor = 'A';       
-    
-    cursor = heap_mem + 1;
-    *cursor = 'B';       
+	// FIX: Write 8 bytes safely inside the boundary
+	// 4096 - 8 = 4088. This occupies bytes 4088 to 4095.
+	cursor = heap_mem + 4088;
+	*cursor = 'Z';       
 
-    // FIX: Write 8 bytes safely inside the boundary
-    // 4096 - 8 = 4088. This occupies bytes 4088 to 4095.
-    cursor = heap_mem + 4088;
-    *cursor = 'Z';       
+	// 3. Read back
+	print("3. Verifying data...\n");
+	
+	cursor = heap_mem;
+	char c1 = *cursor; // Reads 8 bytes, but char type truncates to 1
+	
+	cursor = heap_mem + 4088;
+	char c3 = *cursor;
 
-    // 3. Read back
-    print("3. Verifying data...\n");
-    
-    cursor = heap_mem;
-    char c1 = *cursor; // Reads 8 bytes, but char type truncates to 1
-    
-    cursor = heap_mem + 4088;
-    char c3 = *cursor;
+	print("   [0]    = "); print_char(c1); print("\n");
+	print("   [4088] = "); print_char(c3); print("\n");
 
-    print("   [0]    = "); print_char(c1); print("\n");
-    print("   [4088] = "); print_char(c3); print("\n");
+	if (c1 != 'A') | (c3 != 'Z') {
+		print("Error: Memory verification failed\n");
+		return EXIT_FAILURE;
+	}
 
-    if (c1 != 'A') | (c3 != 'Z') {
-        print("Error: Memory verification failed\n");
-        exit(1);
-    }
+	// 4. Free memory
+	print("4. Freeing memory...\n");
+	munmap(heap_mem, size);
 
-    // 4. Free memory
-    print("4. Freeing memory...\n");
-    munmap(heap_mem, size);
-
-    print("Success.\n");
-    return 0;
+	print("Success.\n");
+	return EXIT_SUCCESS;
 }

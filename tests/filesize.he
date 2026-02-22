@@ -1,5 +1,3 @@
-// expect-exit: 0
-
 #include "lib/std.he"
 
 fn main()
@@ -14,7 +12,7 @@ fn main()
 
 	if res < 0 {
 		print("Error: Could not stat 'heliumc'. (Did you build the compiler?)\n");
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 	}
 
 	// st_size is at offset 48. 
@@ -25,5 +23,5 @@ fn main()
 	print_int(size);
 	print(" bytes\n");
 
-	exit(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 }

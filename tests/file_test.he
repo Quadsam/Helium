@@ -1,12 +1,5 @@
 #include "lib/std.he"
 
-#define O_WRONLY 1
-#define O_RDWR   2
-#define O_CREAT  64
-#define SEEK_SET 0
-#define SEEK_CUR 1
-#define SEEK_END 2
-
 fn main()
 {
 	print("=== File Operations Test ===\n");
@@ -23,7 +16,7 @@ fn main()
 	int fd = open("testdir/file_a.txt", O_CREAT | O_RDWR, 420); // 0655 octal
 	if fd < 0 {
 		print("Error: Could not open file\n");
-		return 1;
+		return EXIT_FAILURE;
 	}
 	write(fd, "Hello World", 11);
 
@@ -54,16 +47,23 @@ fn main()
 	print("4. Renaming to 'testdir/file_b.txt'...\n");
 	if rename("testdir/file_a.txt", "testdir/file_b.txt") < 0 {
 		print("Error: Rename failed\n");
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	// 5. unlink (delete)
 	print("5. Deleting 'testdir/file_b.txt'...\n");
 	if unlink("testdir/file_b.txt") < 0 {
 		print("Error: Unlink failed\n");
-		return 1;
+		return EXIT_FAILURE;
+	}
+
+	// 6. rmdir
+	print("6. Deleting directory 'testdir'\n");
+	if rmdir("testdir") < 0 {
+		print("Error: rmdir failed\n");
+		return EXIT_FAILURE;
 	}
 
 	print("Success.\n");
-	return 0;
+	return EXIT_SUCCESS;
 }

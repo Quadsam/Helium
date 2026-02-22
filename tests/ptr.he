@@ -17,5 +17,5 @@ fn main()
 	*p = 50;
 	
 	// Exit with x (should be 50)
-	exit(x);
+	return x;
 }

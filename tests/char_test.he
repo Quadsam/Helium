@@ -12,5 +12,5 @@ fn main()
 
 	// Should print "Hi"
 	print(&buf);
-	exit(0);
+	return EXIT_SUCCESS;
 }

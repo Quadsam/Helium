@@ -11,5 +11,5 @@ fn main()
 	// Arg 3: Count (Length)
 	int count = syscall(1, 1, "Hello, World!\n", 14);
 	
-	exit(count); // Exit with the number of bytes written
+	return count; // Exit with the number of bytes written
 }

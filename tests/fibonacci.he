@@ -13,5 +13,5 @@ fn main()
 		b = temp;
 		i++;
 	}
-	exit(b);
+	return b;
 }

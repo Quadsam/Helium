@@ -1,35 +1,35 @@
 #include "lib/std.he"
 
 struct Point {
-    x: int,
-    y: int
+	x: int,
+	y: int
 }
 
 struct BigData {
-    id: int,
-    buf: char, // 1 byte
-    p: ptr     // 8 bytes
-    // Total should be 8 + 1 + 8 = 17 bytes
+	id: int,
+	buf: char, // 1 byte
+	p: ptr     // 8 bytes
+	// Total should be 8 + 1 + 8 = 17 bytes
 }
 
 fn main() {
-    print("=== Sizeof Test ===\n");
+	print("=== Sizeof Test ===\n");
 
-    print("Sizeof int:   "); print_int(sizeof(int));   print("\n");
-    print("Sizeof char:  "); print_int(sizeof(char));  print("\n");
-    print("Sizeof ptr:   "); print_int(sizeof(ptr));   print("\n");
-    print("Sizeof Point: "); print_int(sizeof(Point)); print("\n"); // Expect 16
-    print("Sizeof Big:   "); print_int(sizeof(BigData)); print("\n"); // Expect 17
+	print("Sizeof int:   "); print_int(sizeof(int));   print("\n");
+	print("Sizeof char:  "); print_int(sizeof(char));  print("\n");
+	print("Sizeof ptr:   "); print_int(sizeof(ptr));   print("\n");
+	print("Sizeof Point: "); print_int(sizeof(Point)); print("\n"); // Expect 16
+	print("Sizeof Big:   "); print_int(sizeof(BigData)); print("\n"); // Expect 17
 
-    // Real world usage
-    print("Allocating Point...\n");
-    Point p = malloc(sizeof(Point));
-    
-    p->x = 10;
-    p->y = 20;
-    
-    print("p->x: "); print_int(p->x); print("\n");
-    
-    free(p);
-    return 0;
+	// Real world usage
+	print("Allocating Point...\n");
+	Point p = malloc(sizeof(Point));
+	
+	p->x = 10;
+	p->y = 20;
+	
+	print("p->x: "); print_int(p->x); print("\n");
+	
+	free(p);
+	return EXIT_SUCCESS;
 }

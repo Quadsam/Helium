@@ -1,57 +1,58 @@
 #include "lib/std.he"
 
-fn main() {
-    print("=== Process Test ===\n");
+fn main()
+{
+	print("=== Process Test ===\n");
 
-    int parent_pid = getpid();
-    print("Parent PID: ");
-    print_int(parent_pid);
-    print("\n");
+	int parent_pid = getpid();
+	print("Parent PID: ");
+	print_int(parent_pid);
+	print("\n");
 
-    print("Forking now...\n");
-    int pid = fork();
+	print("Forking now...\n");
+	int pid = fork();
 
-    if pid < 0 {
-        print("Error: Fork failed\n");
-        exit(1);
-    }
+	if pid < 0 {
+		print("Error: Fork failed\n");
+		return EXIT_FAILURE;
+	}
 
-    if pid == 0 {
-        // --- CHILD PROCESS ---
-        int child_self = getpid();
-        print("   [Child] I am alive! My PID is: ");
-        print_int(child_self);
-        print("\n");
-        print("   [Child] Exiting with code 42...\n");
-        exit(42);
-    } else {
-        // --- PARENT PROCESS ---
-        print("   [Parent] Child created with PID: ");
-        print_int(pid);
-        print("\n");
-        print("   [Parent] Waiting for child...\n");
+	if pid == 0 {
+		// --- CHILD PROCESS ---
+		int child_self = getpid();
+		print("   [Child] I am alive! My PID is: ");
+		print_int(child_self);
+		print("\n");
+		print("   [Child] Exiting with code 42...\n");
+		return 42;
+	} else {
+		// --- PARENT PROCESS ---
+		print("   [Parent] Child created with PID: ");
+		print_int(pid);
+		print("\n");
+		print("   [Parent] Waiting for child...\n");
 
-        int status = 0;
-        // pid, status_ptr, options, rusage_ptr
-        int res = wait4(pid, &status, 0, 0);
+		int status = 0;
+		// pid, status_ptr, options, rusage_ptr
+		int res = wait4(pid, &status, 0, 0);
 
-        print("   [Parent] Child finished. Result: ");
-        print_int(res);
-        print("\n");
-        
-        // Extract exit code (WEXITSTATUS is usually (status >> 8) & 0xFF)
-        int exit_code = (status / 256); 
-        // Note: Integer division by 256 is equivalent to right shift 8
-        
-        // Mask with 255 (0xFF)
-        // Since we don't have bitwise AND for expressions yet in all contexts,
-        // we can rely on the fact that 42 fits in the lower byte.
-        // But let's assume standard behavior.
-        
-        print("   [Parent] Child exit code was: ");
-        print_int(exit_code);
-        print("\n");
-    }
+		print("   [Parent] Child finished. Result: ");
+		print_int(res);
+		print("\n");
+		
+		// Extract exit code (WEXITSTATUS is usually (status >> 8) & 0xFF)
+		int exit_code = (status / 256); 
+		// Note: Integer division by 256 is equivalent to right shift 8
+		
+		// Mask with 255 (0xFF)
+		// Since we don't have bitwise AND for expressions yet in all contexts,
+		// we can rely on the fact that 42 fits in the lower byte.
+		// But let's assume standard behavior.
+		
+		print("   [Parent] Child exit code was: ");
+		print_int(exit_code);
+		print("\n");
+	}
 
-    return 0;
+	return EXIT_SUCCESS;
 }

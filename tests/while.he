@@ -10,5 +10,5 @@ fn main()
 		i++;
 	}
 
-	exit(i);
+	return i;
 }

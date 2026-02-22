@@ -17,5 +17,5 @@ fn main()
 	int val = arr[3];
 	
 	// Exit with code 6
-	exit(val);
+	return val;
 }

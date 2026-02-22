@@ -31,5 +31,5 @@ fn main()
 	print_int(p.y);
 	print("\n");
 
-	exit(0);
+	return EXIT_SUCCESS;
 }

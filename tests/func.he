@@ -17,5 +17,5 @@ fn main()
 	// Call works exactly the same
 	int result = add(x, y);
 	
-	exit(result);
+	return result;
 }
