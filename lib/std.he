@@ -4,9 +4,6 @@
 
 #include "lib/syscall.he"
 
-#define EXIT_FAILURE -1
-#define EXIT_SUCCESS 0
-
 // Calculate the length of a null-terminated string
 fn strlen(str: ptr) -> int
 {

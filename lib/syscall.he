@@ -11,6 +11,11 @@ fn write(fd: int, str: ptr, count: int) -> int
 }
 
 #define SYS_open 2
+#define O_RDONLY 0
+#define O_WRONLY 1
+#define O_RDWR   2
+#define O_CREAT  64
+#define O_EXCL   128
 fn open(filename: ptr, flags: int, mode: int) -> int
 {
 	return syscall(SYS_open, filename, flags, mode);
@@ -49,6 +54,9 @@ fn poll(ufds: ptr, nfds: int, timeout: int) -> int
 // Reposition read/write file offset
 // whence: 0 = SET, 1 = CUR, 2 = END
 #define SYS_lseek 8
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 fn lseek(fd: int, offset: int, whence: int) -> int
 {
 	return syscall(SYS_lseek, fd, offset, whence);
@@ -57,6 +65,13 @@ fn lseek(fd: int, offset: int, whence: int) -> int
 // Map memory (allocating heap space)
 // For simple allocation: addr=0, fd=-1, offset=0
 #define SYS_mmap 9
+#define PROT_READ   1
+#define PROT_WRITE  2
+#define PROT_EXEC   4
+#define PROT_NONE   0
+#define MAP_SHARED  1
+#define MAP_PRIVATE 2
+#define MAP_ANON    32
 fn mmap(addr: ptr, len: int, prot: int, flags: int, fd: int, offset: int) -> ptr
 {
 	return syscall(9, addr, len, prot, flags, fd, offset);
@@ -102,7 +117,10 @@ fn execve(filename: ptr, argv: ptr, envp: ptr) -> int
 	return syscall(SYS_execve, filename, argv, envp);
 }
 
+// Exits the current program
 #define SYS_exit 60
+#define EXIT_SUCCESS 0
+#define EXIT_FAILURE -1
 fn exit(code: int) -> int
 {
 	syscall(SYS_exit, code);
@@ -114,13 +132,6 @@ fn exit(code: int) -> int
 fn wait4(pid: int, status: ptr, options: int, rusage: ptr) -> int
 {
 	return syscall(SYS_wait4, pid, status, options, rusage);
-}
-
-// Delete a name and possibly the file it refers to
-#define SYS_unlink 87
-fn unlink(pathname: ptr) -> int
-{
-	return syscall(SYS_unlink, pathname);
 }
 
 // Rename a file
@@ -136,3 +147,18 @@ fn mkdir(pathname: ptr, mode: int) -> int
 {
 	return syscall(SYS_mkdir, pathname, mode);
 }
+
+// Remove a directory
+#define SYS_rmdir 84
+fn rmdir(path: ptr) -> int
+{
+	return syscall(SYS_rmdir, path);
+}
+
+// Delete a name and possibly the file it refers to
+#define SYS_unlink 87
+fn unlink(pathname: ptr) -> int
+{
+	return syscall(SYS_unlink, pathname);
+}
+
