@@ -21,6 +21,9 @@ fn main()
 
 		// Make sure it exists
 		result = stat("test.txt", &statbuf);
+
+		// Clean up
+		unlink("test.txt");
 	}
 
 	return result;
