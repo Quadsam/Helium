@@ -1,0 +1,46 @@
+#include "lib/std.he"
+
+fn return_true() -> int
+{
+    print("  -> return_true called\n");
+    return 1;
+}
+
+fn return_false() -> int
+{
+    print("  -> return_false called\n");
+    return 0;
+}
+
+fn main()
+{
+    print("=== Logical Operators Test ===\n");
+    
+    print("Testing AND (True && False):\n");
+    if return_true() && return_false() {
+        print("FAIL\n");
+        return 1;
+    } else {
+        print("PASS\n");
+    }
+
+    print("\nTesting AND Short-Circuit (False && True):\n");
+    // return_true() should NEVER be called!
+    if return_false() && return_true() {
+        print("FAIL\n");
+        return 1;
+    } else {
+        print("PASS\n");
+    }
+
+    print("\nTesting OR Short-Circuit (True || False):\n");
+    // return_false() should NEVER be called!
+    if return_true() || return_false() {
+        print("PASS\n");
+    } else {
+        print("FAIL\n");
+        return 1;
+    }
+
+    return 0;
+}

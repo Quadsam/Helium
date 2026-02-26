@@ -164,8 +164,20 @@ Token get_next_token(void)
 			}
 			return (Token){".", TOKEN_PERIOD, 0, start_line, start_col, start_offset};
 		case '*': src_pos++; current_col++; return (Token){"*", TOKEN_STAR, 0, start_line, start_col, start_offset};
-		case '|': src_pos++; current_col++; return (Token){"|", TOKEN_PIPE, 0, start_line, start_col, start_offset};
-		case '&': src_pos++; current_col++; return (Token){"&", TOKEN_AMP, 0, start_line, start_col, start_offset};
+		case '|':
+			src_pos++; current_col++;
+			if (source_code[src_pos] == '|') {
+				src_pos++; current_col++;
+				return (Token){"||", TOKEN_OR, 0, start_line, start_col, start_offset};
+			}
+			return (Token){"|", TOKEN_PIPE, 0, start_line, start_col, start_offset};
+		case '&':
+			src_pos++; current_col++;
+			if (source_code[src_pos] == '&') {
+				src_pos++; current_col++;
+				return (Token){"&&", TOKEN_AND, 0, start_line, start_col, start_offset};
+			}
+			return (Token){"&", TOKEN_AMP, 0, start_line, start_col, start_offset};
 		// Division or Comment
 		case '/': 
 			if (source_code[src_pos + 1] == '/') {

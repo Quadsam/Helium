@@ -23,6 +23,7 @@ int main(int argc, char **argv)
 		printf("Usage: %s [options] <input_file>\n", argv[0]);
 		printf("Options:\n");
 		printf("  -o <file>  Specify output assembly file (default: out.s)\n");
+		printf("  -V         Print version and exit\n");
 		return 1;
 	}
 
@@ -39,7 +40,7 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Error: -o requires a filename\n");
 				return 1;
 			}
-		} else if (strcmp(argv[i], "-V") == 0) {
+		} else if (strcmp(argv[i], "-V") == 0 || strcmp(argv[i], "--version") == 0) {
 			fprintf(stdout, "%s v%s\n", NAME, VERSION);
 			return 0;
 		} else {

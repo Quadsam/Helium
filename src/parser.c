@@ -413,9 +413,38 @@ ASTNode *parse_comparison(void)
 	return node;
 }
 
+ASTNode *parse_logical_and(void)
+{
+	// AND binds tighter than OR, so it calls comparison
+	ASTNode *node = parse_comparison();
+	while (current_token.type == TOKEN_AND) {
+		ASTNode *newNode = create_node(NODE_AND);
+		newNode->left = node;
+		advance();
+		newNode->right = parse_comparison();
+		node = newNode;
+	}
+	return node;
+}
+
+ASTNode *parse_logical_or(void)
+{
+	// OR has lowest precedence, so it calls AND
+	ASTNode *node = parse_logical_and();
+	while (current_token.type == TOKEN_OR) {
+		ASTNode *newNode = create_node(NODE_OR);
+		newNode->left = node;
+		advance();
+		newNode->right = parse_logical_and();
+		node = newNode;
+	}
+	return node;
+}
+
+
 ASTNode *parse_expression(void)
 {
-	ASTNode* lhs = parse_comparison();
+	ASTNode* lhs = parse_logical_or();
 
 	// Check for Assignment
 	if (current_token.type == TOKEN_ASSIGN) {

@@ -2,7 +2,7 @@
 #define HELIUM_H
 
 #define NAME "heliumc"
-#define VERSION "0.5.0"
+#define VERSION "0.5.1"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +42,9 @@ typedef enum {
 	TOKEN_STAR,         // *
 	TOKEN_SLASH,        // /
 	TOKEN_PIPE,         // |
+	TOKEN_OR,           // ||
 	TOKEN_AMP,          // &
+	TOKEN_AND,          // &&
 	TOKEN_EQ,           // ==
 	TOKEN_NEQ,          // !=
 	TOKEN_LT,           // <
@@ -79,11 +81,13 @@ typedef enum {
 	NODE_FUNCTION,      // Function definition
 	NODE_IF,            // if ...
 	NODE_WHILE,         // while ...
-	NODE_FOR,			// for ...
+	NODE_FOR,           // for ...
 	NODE_GT,            // >
 	NODE_LT,            // <
 	NODE_EQ,            // ==
 	NODE_NEQ,           // !=
+	NODE_AND,           // &&
+	NODE_OR,            // ||
 	NODE_SYSCALL,       // syscall()
 	NODE_POST_INC,      // i++
 	NODE_STRING,        // "string"

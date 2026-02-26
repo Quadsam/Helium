@@ -194,7 +194,7 @@ The compiler comes with a lightweight standard library that wraps common operati
 * [X] **`for` loops (C and Rust syntax)**
 * [X] **Optimization passes** (Constant Folding, Dead Code Elimination)
 * [X] **Detailed error messages** (Source-mapped carets)
-* [ ] **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
+* [X] **Logical Operators (`&&`, `||`):** Currently, we can do `if a == b`, but we cannot do `if a == b && c < d`.
 * [ ] **Implicit Bounds Checking**
 * [ ] **Type Casting & Type Safety Improvements**
 * [ ] **Debug info (DWARF generation)**

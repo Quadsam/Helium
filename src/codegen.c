@@ -668,6 +668,64 @@ void gen_asm(ASTNode *node) {
 			break;
 		}
 
+		case NODE_AND: {
+			int label_false = new_label();
+			int label_end = new_label();
+
+			// Evaluate LHS
+			gen_asm(node->left);
+			printf("  pop rax\n");
+			printf("  cmp rax, 0\n");
+			printf("  je .L%d\n", label_false); // SHORT-CIRCUIT: If LHS is 0, skip RHS
+
+			// Evaluate RHS
+			gen_asm(node->right);
+			printf("  pop rax\n");
+			printf("  cmp rax, 0\n");
+			printf("  je .L%d\n", label_false);
+
+			// Both are true
+			printf("  mov rax, 1\n");
+			printf("  jmp .L%d\n", label_end);
+
+			// False path
+			printf(".L%d:\n", label_false);
+			printf("  mov rax, 0\n");
+
+			printf(".L%d:\n", label_end);
+			printf("  push rax\n");
+			break;
+		}
+
+		case NODE_OR: {
+			int label_true = new_label();
+			int label_end = new_label();
+
+			// Evaluate LHS
+			gen_asm(node->left);
+			printf("  pop rax\n");
+			printf("  cmp rax, 0\n");
+			printf("  jne .L%d\n", label_true); // SHORT-CIRCUIT: If LHS is 1, skip RHS!
+
+			// Evaluate RHS
+			gen_asm(node->right);
+			printf("  pop rax\n");
+			printf("  cmp rax, 0\n");
+			printf("  jne .L%d\n", label_true);
+
+			// Both are false
+			printf("  mov rax, 0\n");
+			printf("  jmp .L%d\n", label_end);
+
+			// True path
+			printf(".L%d:\n", label_true);
+			printf("  mov rax, 1\n");
+
+			printf(".L%d:\n", label_end);
+			printf("  push rax\n");
+			break;
+		}
+
 		// Struct definitions are handled entireley by the parser. They do not
 		// generate any assembly code.
 		case NODE_STRUCT_DEFN: break;
