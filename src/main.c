@@ -39,6 +39,9 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Error: -o requires a filename\n");
 				return 1;
 			}
+		} else if (strcmp(argv[i], "-V") == 0) {
+			fprintf(stdout, "%s v%s\n", NAME, VERSION);
+			return 0;
 		} else {
 			input_filename = argv[i];
 			current_filename = input_filename;

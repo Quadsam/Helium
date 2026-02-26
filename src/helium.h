@@ -1,6 +1,9 @@
 #ifndef HELIUM_H
 #define HELIUM_H
 
+#define NAME "heliumc"
+#define VERSION "0.5.0"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>

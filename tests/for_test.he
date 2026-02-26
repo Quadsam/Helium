@@ -16,7 +16,7 @@ fn main()
 		print("\n");
 	}
 
-	print("=== Go/Rust Hybrid Loop ===\n");
+	print("=== C/Rust Hybrid Loop ===\n");
 	for int j = 10; j < 13; j++ {
 		print("Iter: ");
 		print_int(j);

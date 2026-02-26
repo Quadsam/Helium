@@ -4,13 +4,13 @@ fn main()
 {
 	// Syscall 2 = OPEN
 	// Arg 1: Filename ("test.txt")
-	// Arg 2: Flags (65 = O_WRONLY | O_CREAT in Linux)
+	// Arg 2: Flags (O_WRONLY | O_CREAT)
 	// Arg 3: Mode (420 = 0644 octal permissions)
 	// Returns: File Descriptor (fd)
 
-	int result = 1;
+	int result = EXIT_FAILURE;
 	int statbuf[20]; 
-	int fd = open("test.txt", 65, 420);
+	int fd = open("test.txt", O_WRONLY | O_CREAT, 420);
 
 	if 1 > 0 {
 		// Write to the file we just opened
