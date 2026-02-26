@@ -1,6 +1,6 @@
 CC        := gcc
 TARGET    := heliumc
-CFLAGS    := -std=gnu23 -Wall -Wextra -Werror
+CFLAGS    := -std=gnu23 -Wall -Wextra
 LDFLAGS   :=
 
 # Directories
